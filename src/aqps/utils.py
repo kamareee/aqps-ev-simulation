@@ -2,11 +2,19 @@
 Utility functions for Adaptive Queuing Priority Scheduler (AQPS).
 
 This module provides helper functions for laxity calculation, energy conversions,
-and other common operations used throughout the scheduler.
+quantization, and other common operations used throughout the scheduler.
+
+Phase 4 additions:
+- J1772 pilot signal quantization helpers
+- DataFrame export utilities
 """
 
-from typing import Dict, List
+from typing import Dict, List, Optional, Any
 from .data_structures import SessionInfo
+
+
+# Standard J1772 pilot signals (Amps)
+J1772_PILOT_SIGNALS = [0.0, 8.0, 16.0, 24.0, 32.0]
 
 
 def calculate_laxity(
@@ -248,3 +256,202 @@ def calculate_total_energy_delivered(
     )
     hours = period_minutes / 60.0
     return total_power_kw * hours
+
+
+# =============================================================================
+# Phase 4: Quantization Utilities
+# =============================================================================
+
+def quantize_rate_floor(
+    rate: float,
+    pilot_signals: List[float] = None
+) -> float:
+    """
+    Quantize a rate to the nearest lower valid pilot signal (floor).
+    
+    Args:
+        rate: Continuous charging rate (Amps)
+        pilot_signals: List of valid pilot signals (uses J1772 if None)
+    
+    Returns:
+        Floor-quantized rate (Amps)
+    
+    Examples:
+        >>> quantize_rate_floor(25.5)
+        24.0
+        >>> quantize_rate_floor(7.5)
+        0.0
+        >>> quantize_rate_floor(32.0)
+        32.0
+    """
+    if pilot_signals is None:
+        pilot_signals = J1772_PILOT_SIGNALS
+    
+    if rate <= 0:
+        return 0.0
+    
+    valid = [s for s in pilot_signals if s <= rate]
+    return max(valid) if valid else 0.0
+
+
+def quantize_rate_ceil(
+    rate: float,
+    pilot_signals: List[float] = None
+) -> float:
+    """
+    Quantize a rate to the nearest higher valid pilot signal (ceiling).
+    
+    Args:
+        rate: Continuous charging rate (Amps)
+        pilot_signals: List of valid pilot signals (uses J1772 if None)
+    
+    Returns:
+        Ceiling-quantized rate (Amps)
+    
+    Examples:
+        >>> quantize_rate_ceil(25.5)
+        32.0
+        >>> quantize_rate_ceil(7.5)
+        8.0
+        >>> quantize_rate_ceil(32.0)
+        32.0
+    """
+    if pilot_signals is None:
+        pilot_signals = J1772_PILOT_SIGNALS
+    
+    if rate <= 0:
+        return 0.0
+    
+    valid = [s for s in pilot_signals if s >= rate]
+    return min(valid) if valid else max(pilot_signals)
+
+
+def quantize_schedule_floor(
+    schedule: Dict[str, float],
+    pilot_signals: List[float] = None
+) -> Dict[str, float]:
+    """
+    Quantize all rates in a schedule using floor quantization.
+    
+    Args:
+        schedule: Dictionary mapping station_id to rate (Amps)
+        pilot_signals: List of valid pilot signals (uses J1772 if None)
+    
+    Returns:
+        Schedule with floor-quantized rates
+    """
+    return {
+        station_id: quantize_rate_floor(rate, pilot_signals)
+        for station_id, rate in schedule.items()
+    }
+
+
+def calculate_quantization_loss(
+    pre_schedule: Dict[str, float],
+    post_schedule: Dict[str, float]
+) -> Dict[str, Any]:
+    """
+    Calculate the capacity loss from quantization.
+    
+    Args:
+        pre_schedule: Schedule before quantization
+        post_schedule: Schedule after quantization
+    
+    Returns:
+        Dictionary with quantization statistics
+    """
+    pre_total = sum(pre_schedule.values())
+    post_total = sum(post_schedule.values())
+    
+    per_station_loss = {}
+    for station_id in pre_schedule:
+        pre_rate = pre_schedule.get(station_id, 0.0)
+        post_rate = post_schedule.get(station_id, 0.0)
+        per_station_loss[station_id] = pre_rate - post_rate
+    
+    return {
+        'pre_quantization_total': pre_total,
+        'post_quantization_total': post_total,
+        'total_loss': pre_total - post_total,
+        'efficiency_pct': (post_total / pre_total * 100.0) if pre_total > 0 else 100.0,
+        'per_station_loss': per_station_loss,
+    }
+
+
+# =============================================================================
+# Phase 4: DataFrame Export Utilities
+# =============================================================================
+
+def metrics_to_dataframe_data(metrics_list: List[Any]) -> List[Dict]:
+    """
+    Convert a list of metrics objects to DataFrame-ready dictionaries.
+    
+    Args:
+        metrics_list: List of metrics objects with to_dict() method
+    
+    Returns:
+        List of dictionaries suitable for pandas DataFrame creation
+    """
+    result = []
+    for m in metrics_list:
+        if hasattr(m, 'to_dict'):
+            result.append(m.to_dict())
+        elif hasattr(m, '__dict__'):
+            result.append(vars(m).copy())
+        else:
+            result.append({'value': m})
+    return result
+
+
+def export_to_csv_string(data: List[Dict], delimiter: str = ',') -> str:
+    """
+    Export list of dictionaries to CSV string format.
+    
+    Args:
+        data: List of dictionaries with consistent keys
+        delimiter: Field delimiter (default: comma)
+    
+    Returns:
+        CSV-formatted string
+    """
+    if not data:
+        return ""
+    
+    # Get headers from first item
+    headers = list(data[0].keys())
+    
+    lines = [delimiter.join(str(h) for h in headers)]
+    
+    for row in data:
+        values = [str(row.get(h, '')) for h in headers]
+        lines.append(delimiter.join(values))
+    
+    return '\n'.join(lines)
+
+
+def calculate_summary_statistics(values: List[float]) -> Dict[str, float]:
+    """
+    Calculate summary statistics for a list of values.
+    
+    Args:
+        values: List of numeric values
+    
+    Returns:
+        Dictionary with min, max, mean, sum statistics
+    """
+    if not values:
+        return {
+            'min': 0.0,
+            'max': 0.0,
+            'mean': 0.0,
+            'sum': 0.0,
+            'count': 0,
+        }
+    
+    return {
+        'min': min(values),
+        'max': max(values),
+        'mean': sum(values) / len(values),
+        'sum': sum(values),
+        'count': len(values),
+    }
