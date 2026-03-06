@@ -1,148 +1,154 @@
+# pylint: disable=wrong-import-order,missing-module-docstring,missing-function-docstring
+
 import pandas as pd
 import numpy as np
 import json
+import random
 from datetime import datetime, timedelta
 
-def generate_scenarios(selected_archetype=None):
+
+def generate_scenarios_for_fleet(fleet_size):
     """
     Generates deterministic simulation scenarios for the AQPC framework.
-    :param selected_archetype: 'Light', 'Medium', or None (defaults to Mix)
+    Outputs scenarios S1, S3, and S6 for a given fleet size.
     """
-    
-    # 1. Define Fleet Archetypes (Heavy removed)
+
+    # 1. Define Fleet Archetypes
     archetypes = {
-        'Light': {'cap': 40, 'p_max': 11, 'eff': 0.95},
-        'Medium': {'cap': 75, 'p_max': 22, 'eff': 0.92}
+        "Light": {"cap": 40, "p_max": 11, "eff": 0.95},
+        "Medium": {"cap": 75, "p_max": 22, "eff": 0.92},
     }
 
-    # Helper function to get archetype data based on selection or mix
     def get_arc_props(index):
-        if selected_archetype and selected_archetype in archetypes:
-            name = selected_archetype
-        else:
-            # Cyclic mix between Light and Medium
-            keys = list(archetypes.keys())
-            name = keys[index % len(keys)]
-        
+        # Cyclic mix between Light and Medium
+        keys = list(archetypes.keys())
+        name = keys[index % len(keys)]
         props = archetypes[name].copy()
-        props['name'] = name
+        props["name"] = name
         return props
-    
+
     # 2. Environmental Forecast Profiles (24 hours, 15-min steps)
-    time_steps = pd.date_range("2026-02-12 00:00", periods=96, freq='15min')
-    
+    start_time = datetime(2026, 2, 12, 0, 0)
+    time_steps = pd.date_range(start_time, periods=96, freq="15min")
+
     # ToU Tariff (Victorian Default Market Offer approx)
     def get_tou(dt):
-        hour = dt.hour
-        if 15 <= hour < 21: return 0.35 # Peak
-        if 7 <= hour < 15 or 21 <= hour < 22: return 0.22 # Shoulder
-        return 0.15 # Off-Peak
-    
+        hour = dt.hour + dt.minute / 60.0
+        if (8 <= hour < 10) or (16 <= hour < 18):
+            return 0.26668  # Peak
+        return 0.05623  # Off-Peak
+
     tou_profile = [get_tou(t) for t in time_steps]
-    
-    # PV Profile (Bell Curve - 12kW peak)
-    pv_peak = 12.0
-    pv_profile = [pv_peak * max(0, np.sin(np.pi * (t.hour + t.minute/60 - 6) / 12)) for t in time_steps]
-    
-    # Base Load (5kW idle + 5kW office hours)
-    base_load = [5.0 + (5.0 if 9 <= t.hour < 17 else 0.0) for t in time_steps]
+
+    # PV Profile (Bell Curve - Peak around noon)
+    pv_peak = (
+        fleet_size / 45
+    ) * 50.0  # Scale PV peak with fleet size (e.g., 50kW for 45 EVs)
+    pv_profile = [
+        pv_peak * max(0, np.sin(np.pi * (t.hour + t.minute / 60 - 6) / 12))
+        for t in time_steps
+    ]
+
+    # Base Load (scaled with fleet size)
+    base_load_idle = (fleet_size / 45) * 5.0
+    base_load_active = (fleet_size / 45) * 10.0
+    base_load = [
+        base_load_idle + (base_load_active if 9 <= t.hour < 17 else 0.0)
+        for t in time_steps
+    ]
 
     # 3. Scenario Logic
     scenarios = {}
 
-    # --- Scenario A: Baseline ---
-    ev_list_a = []
-    windows = [
-        {"start": 9, "end": 11, "count": 10}, 
-        {"start": 15, "end": 16, "count": 6}
-    ]
-    
-    global_id = 0
-    for win in windows:
-        win_times = time_steps[(time_steps.hour >= win["start"]) & (time_steps.hour < win["end"])]
-        for i in range(win["count"]):
-            arrival = win_times[i % len(win_times)]
-            departure = arrival + timedelta(hours=4)
-            arc = get_arc_props(global_id)
-            
-            ev_list_a.append({
-                'id': f'EV_A_{global_id}',
-                'arrival': arrival.isoformat(),
-                'departure': departure.isoformat(),
-                'req_energy': arc['cap'] * 0.7,
-                'init_energy': arc['cap'] * 0.2,
-                'p_max': arc['p_max'],
-                'eff': arc['eff'],
-                'archetype': arc['name'],
-                'priority': 'High' if i < (win["count"] // 2) else 'Low'
-            })
-            global_id += 1
-    scenarios['Scenario_A_Baseline'] = ev_list_a
+    # Configuration for requested scenarios
+    scenario_configs = {
+        "S1_Baseline": {"priority_pct": 0.27, "arrival_pattern": "uniform"},
+        "S3_HighPriority": {"priority_pct": 0.50, "arrival_pattern": "uniform"},
+        "S6_PeakStress": {"priority_pct": 0.50, "arrival_pattern": "pm_cluster"},
+    }
 
-    # --- Scenario B: Mid-Day Rush ---
-    ev_list_b = []
-    for i in range(15):
-        is_rush = 5 <= i <= 14
-        arrival = time_steps[48] if is_rush else time_steps[32 + i]
-        departure = arrival + (timedelta(hours=2) if is_rush else timedelta(hours=6))
-        arc = get_arc_props(i)
-        
-        ev_list_b.append({
-            'id': f'EV_B_{i}',
-            'arrival': arrival.isoformat(),
-            'departure': departure.isoformat(),
-            'req_energy': arc['cap'] * 0.6,
-            'init_energy': arc['cap'] * 0.1,
-            'p_max': arc['p_max'],
-            'eff': arc['eff'],
-            'archetype': arc['name'],
-            'priority': 'High' if is_rush else 'Low'
-        })
-    scenarios['Scenario_B_MidDayRush'] = ev_list_b
+    for sc_name, config in scenario_configs.items():
+        # Set a fixed seed for reproducible vehicle generation per scenario
+        random.seed(hash(sc_name) % 10000)
+        np.random.seed(hash(sc_name) % 10000)
 
-    # --- Scenario C: Late Return Conflict ---
-    ev_list_c = []
-    for i in range(8):
-        arrival = time_steps[56] # 2 PM
-        arc = get_arc_props(i)
-        # Dwell time calc based on arc specifics
-        dwell_hours = (arc['cap'] * 0.6) / (arc['p_max'] * arc['eff']) * 1.2
-        departure = arrival + timedelta(hours=dwell_hours)
-        
-        ev_list_c.append({
-            'id': f'EV_C_{i}',
-            'arrival': arrival.isoformat(),
-            'departure': departure.isoformat(),
-            'req_energy': arc['cap'] * 0.7,
-            'init_energy': arc['cap'] * 0.1,
-            'p_max': arc['p_max'],
-            'eff': arc['eff'],
-            'archetype': arc['name'],
-            'priority': 'High'
-        })
-    scenarios['Scenario_C_LateReturn'] = ev_list_c
+        ev_list = []
+
+        # Determine exactly which EVs get Priority based on target percentage
+        num_priority = int(fleet_size * config["priority_pct"])
+        priority_indices = set(random.sample(range(fleet_size), num_priority))
+
+        for i in range(fleet_size):
+            arc = get_arc_props(i)
+
+            # --- Arrival Time Generation ---
+            if config["arrival_pattern"] == "uniform":
+                # Uniform arrivals between 6:00 AM and 6:00 PM (18.0)
+                arrival_hour = np.random.uniform(6.0, 18.0)
+            elif config["arrival_pattern"] == "pm_cluster":
+                # 70% arrive during peak PM (2:00 PM - 6:00 PM), 30% uniform
+                if random.random() < 0.70:
+                    arrival_hour = np.random.uniform(14.0, 18.0)
+                else:
+                    arrival_hour = np.random.uniform(6.0, 14.0)
+
+            # Convert float hour to datetime
+            arrival_dt = start_time + timedelta(hours=arrival_hour)
+            # Round to nearest 15 mins
+            arrival_dt = arrival_dt.replace(second=0, microsecond=0)
+            minute = (arrival_dt.minute // 15) * 15
+            arrival_dt = arrival_dt.replace(minute=minute)
+
+            # --- Departure Time Generation ---
+            # Dwell time between 4 and 10 hours
+            dwell_hours = np.random.uniform(4.0, 10.0)
+            departure_dt = arrival_dt + timedelta(hours=dwell_hours)
+
+            # --- Energy Request ---
+            # Random request between 20% and 80% of capacity
+            req_energy = arc["cap"] * np.random.uniform(0.2, 0.8)
+            init_energy = arc["cap"] * np.random.uniform(0.1, 0.2)
+
+            ev_list.append(
+                {
+                    "id": f"EV_{i:03d}",
+                    "arrival": arrival_dt.isoformat(),
+                    "departure": departure_dt.isoformat(),
+                    "req_energy": round(req_energy, 2),
+                    "init_energy": round(init_energy, 2),
+                    "p_max": arc["p_max"],
+                    "eff": arc["eff"],
+                    "archetype": arc["name"],
+                    "priority": "High" if i in priority_indices else "Low",
+                }
+            )
+
+        scenarios[sc_name] = ev_list
 
     # --- Final Compilation ---
     output = {
-        'metadata': {
-            'generated_at': datetime.now().isoformat(),
-            'selected_archetype': selected_archetype if selected_archetype else "Mix",
-            'step_delta': 0.25,
-            'horizon': 96
+        "metadata": {
+            "generated_at": datetime.now().isoformat(),
+            "fleet_size": fleet_size,
+            "step_delta": 0.25,
+            "horizon": 96,
         },
-        'environment': {
-            'tou_tariff': tou_profile,
-            'pv_forecast': pv_profile,
-            'base_load': base_load
+        "environment": {
+            "tou_tariff": tou_profile,
+            "pv_forecast": pv_profile,
+            "base_load": base_load,
         },
-        'scenarios': scenarios
+        "scenarios": scenarios,
     }
 
-    filename = f"simulation_data_{selected_archetype if selected_archetype else 'mix'}.json"
-    with open(filename, 'w') as f:
+    filename = f"simulation_data_{fleet_size}EVs.json"
+    with open(filename, "w") as f:
         json.dump(output, f, indent=4)
-    
-    print(f"Scenarios for {selected_archetype if selected_archetype else 'Mix'} generated in {filename}")
+
+    print(f"Generated data for {fleet_size} EVs saved to {filename}")
+
 
 if __name__ == "__main__":
-    generate_scenarios()
+    # Generate files for both fleet configurations
+    generate_scenarios_for_fleet(fleet_size=45)
+    generate_scenarios_for_fleet(fleet_size=90)

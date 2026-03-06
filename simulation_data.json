@@ -1,0 +1,1688 @@
+{
+  "metadata": {
+    "step_minutes": 15,
+    "horizon": 96
+  },
+  "environment": {
+    "tou": [
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.22,
+      0.22,
+      0.22,
+      0.22,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15,
+      0.15
+    ],
+    "pv": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      3.270156461507153,
+      6.526309611002579,
+      9.754516100806413,
+      12.940952255126037,
+      16.07197326515808,
+      19.134171618254488,
+      22.114434510950066,
+      24.999999999999996,
+      27.778511650980107,
+      30.438071450436034,
+      32.96729075500344,
+      35.35533905932738,
+      37.59199037394886,
+      39.66766701456176,
+      41.57348061512726,
+      43.30127018922193,
+      44.843637076634415,
+      46.19397662556434,
+      47.34650647475528,
+      48.29629131445341,
+      49.039264020161525,
+      49.57224306869052,
+      49.892946161930176,
+      50.0,
+      49.892946161930176,
+      49.572243068690526,
+      49.039264020161525,
+      48.29629131445341,
+      47.34650647475529,
+      46.19397662556434,
+      44.843637076634415,
+      43.30127018922194,
+      41.573480615127266,
+      39.66766701456176,
+      37.59199037394887,
+      35.35533905932738,
+      32.96729075500345,
+      30.438071450436045,
+      27.778511650980107,
+      24.999999999999996,
+      22.114434510950066,
+      19.134171618254495,
+      16.07197326515809,
+      12.940952255126051,
+      9.75451610080643,
+      6.526309611002579,
+      3.2701564615071557,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "base_load": [
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      25.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0
+    ],
+    "bess": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "scenarios": {
+    "S1": [
+      {
+        "id": "EV_42",
+        "arrival_idx": 0,
+        "departure_idx": 20,
+        "req_energy_kwh": 23.23,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_20",
+        "arrival_idx": 1,
+        "departure_idx": 46,
+        "req_energy_kwh": 22.4,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_12",
+        "arrival_idx": 2,
+        "departure_idx": 22,
+        "req_energy_kwh": 24.15,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_14",
+        "arrival_idx": 3,
+        "departure_idx": 43,
+        "req_energy_kwh": 31.31,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_17",
+        "arrival_idx": 6,
+        "departure_idx": 33,
+        "req_energy_kwh": 41.07,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_36",
+        "arrival_idx": 6,
+        "departure_idx": 30,
+        "req_energy_kwh": 24.47,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_32",
+        "arrival_idx": 7,
+        "departure_idx": 46,
+        "req_energy_kwh": 12.28,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_15",
+        "arrival_idx": 8,
+        "departure_idx": 49,
+        "req_energy_kwh": 26.16,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_31",
+        "arrival_idx": 8,
+        "departure_idx": 47,
+        "req_energy_kwh": 37.31,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_23",
+        "arrival_idx": 9,
+        "departure_idx": 54,
+        "req_energy_kwh": 57.25,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_3",
+        "arrival_idx": 10,
+        "departure_idx": 36,
+        "req_energy_kwh": 54.98,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_45",
+        "arrival_idx": 12,
+        "departure_idx": 46,
+        "req_energy_kwh": 23.68,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_25",
+        "arrival_idx": 13,
+        "departure_idx": 51,
+        "req_energy_kwh": 42.03,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_43",
+        "arrival_idx": 13,
+        "departure_idx": 35,
+        "req_energy_kwh": 24.02,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_44",
+        "arrival_idx": 14,
+        "departure_idx": 44,
+        "req_energy_kwh": 14.22,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_33",
+        "arrival_idx": 16,
+        "departure_idx": 39,
+        "req_energy_kwh": 49.84,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_22",
+        "arrival_idx": 17,
+        "departure_idx": 58,
+        "req_energy_kwh": 21.0,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_27",
+        "arrival_idx": 17,
+        "departure_idx": 47,
+        "req_energy_kwh": 53.58,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_16",
+        "arrival_idx": 19,
+        "departure_idx": 62,
+        "req_energy_kwh": 20.8,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_7",
+        "arrival_idx": 20,
+        "departure_idx": 36,
+        "req_energy_kwh": 33.91,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_13",
+        "arrival_idx": 20,
+        "departure_idx": 44,
+        "req_energy_kwh": 24.94,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_5",
+        "arrival_idx": 21,
+        "departure_idx": 57,
+        "req_energy_kwh": 58.87,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_8",
+        "arrival_idx": 21,
+        "departure_idx": 65,
+        "req_energy_kwh": 20.64,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_38",
+        "arrival_idx": 22,
+        "departure_idx": 67,
+        "req_energy_kwh": 18.5,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_48",
+        "arrival_idx": 22,
+        "departure_idx": 44,
+        "req_energy_kwh": 20.21,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_28",
+        "arrival_idx": 25,
+        "departure_idx": 65,
+        "req_energy_kwh": 17.62,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_9",
+        "arrival_idx": 26,
+        "departure_idx": 68,
+        "req_energy_kwh": 37.49,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_40",
+        "arrival_idx": 26,
+        "departure_idx": 44,
+        "req_energy_kwh": 21.44,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_10",
+        "arrival_idx": 27,
+        "departure_idx": 70,
+        "req_energy_kwh": 19.33,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_24",
+        "arrival_idx": 30,
+        "departure_idx": 61,
+        "req_energy_kwh": 18.53,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_47",
+        "arrival_idx": 31,
+        "departure_idx": 50,
+        "req_energy_kwh": 56.53,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_34",
+        "arrival_idx": 32,
+        "departure_idx": 74,
+        "req_energy_kwh": 13.48,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_37",
+        "arrival_idx": 33,
+        "departure_idx": 49,
+        "req_energy_kwh": 24.88,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_39",
+        "arrival_idx": 34,
+        "departure_idx": 61,
+        "req_energy_kwh": 46.41,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_4",
+        "arrival_idx": 35,
+        "departure_idx": 58,
+        "req_energy_kwh": 26.16,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_19",
+        "arrival_idx": 35,
+        "departure_idx": 68,
+        "req_energy_kwh": 47.34,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_41",
+        "arrival_idx": 36,
+        "departure_idx": 66,
+        "req_energy_kwh": 49.25,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_0",
+        "arrival_idx": 38,
+        "departure_idx": 73,
+        "req_energy_kwh": 31.01,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_2",
+        "arrival_idx": 38,
+        "departure_idx": 79,
+        "req_energy_kwh": 15.12,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_35",
+        "arrival_idx": 38,
+        "departure_idx": 79,
+        "req_energy_kwh": 26.85,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_46",
+        "arrival_idx": 38,
+        "departure_idx": 70,
+        "req_energy_kwh": 18.29,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_26",
+        "arrival_idx": 39,
+        "departure_idx": 75,
+        "req_energy_kwh": 19.77,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_21",
+        "arrival_idx": 41,
+        "departure_idx": 60,
+        "req_energy_kwh": 29.43,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_1",
+        "arrival_idx": 42,
+        "departure_idx": 65,
+        "req_energy_kwh": 44.95,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_49",
+        "arrival_idx": 42,
+        "departure_idx": 86,
+        "req_energy_kwh": 31.08,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_6",
+        "arrival_idx": 43,
+        "departure_idx": 88,
+        "req_energy_kwh": 16.25,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_29",
+        "arrival_idx": 44,
+        "departure_idx": 68,
+        "req_energy_kwh": 33.61,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_30",
+        "arrival_idx": 44,
+        "departure_idx": 60,
+        "req_energy_kwh": 12.31,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_11",
+        "arrival_idx": 46,
+        "departure_idx": 91,
+        "req_energy_kwh": 29.99,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_18",
+        "arrival_idx": 46,
+        "departure_idx": 64,
+        "req_energy_kwh": 30.19,
+        "max_power_kw": 11,
+        "is_priority": false
+      }
+    ],
+    "S3": [
+      {
+        "id": "EV_42",
+        "arrival_idx": 0,
+        "departure_idx": 20,
+        "req_energy_kwh": 23.23,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_20",
+        "arrival_idx": 1,
+        "departure_idx": 46,
+        "req_energy_kwh": 22.4,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_12",
+        "arrival_idx": 2,
+        "departure_idx": 22,
+        "req_energy_kwh": 24.15,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_14",
+        "arrival_idx": 3,
+        "departure_idx": 43,
+        "req_energy_kwh": 31.31,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_17",
+        "arrival_idx": 6,
+        "departure_idx": 33,
+        "req_energy_kwh": 41.07,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_36",
+        "arrival_idx": 6,
+        "departure_idx": 30,
+        "req_energy_kwh": 24.47,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_32",
+        "arrival_idx": 7,
+        "departure_idx": 46,
+        "req_energy_kwh": 12.28,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_15",
+        "arrival_idx": 8,
+        "departure_idx": 49,
+        "req_energy_kwh": 26.16,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_31",
+        "arrival_idx": 8,
+        "departure_idx": 47,
+        "req_energy_kwh": 37.31,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_23",
+        "arrival_idx": 9,
+        "departure_idx": 54,
+        "req_energy_kwh": 57.25,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_3",
+        "arrival_idx": 10,
+        "departure_idx": 36,
+        "req_energy_kwh": 54.98,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_45",
+        "arrival_idx": 12,
+        "departure_idx": 46,
+        "req_energy_kwh": 23.68,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_25",
+        "arrival_idx": 13,
+        "departure_idx": 51,
+        "req_energy_kwh": 42.03,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_43",
+        "arrival_idx": 13,
+        "departure_idx": 35,
+        "req_energy_kwh": 24.02,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_44",
+        "arrival_idx": 14,
+        "departure_idx": 44,
+        "req_energy_kwh": 14.22,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_33",
+        "arrival_idx": 16,
+        "departure_idx": 39,
+        "req_energy_kwh": 49.84,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_22",
+        "arrival_idx": 17,
+        "departure_idx": 58,
+        "req_energy_kwh": 21.0,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_27",
+        "arrival_idx": 17,
+        "departure_idx": 47,
+        "req_energy_kwh": 53.58,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_16",
+        "arrival_idx": 19,
+        "departure_idx": 62,
+        "req_energy_kwh": 20.8,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_7",
+        "arrival_idx": 20,
+        "departure_idx": 36,
+        "req_energy_kwh": 33.91,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_13",
+        "arrival_idx": 20,
+        "departure_idx": 44,
+        "req_energy_kwh": 24.94,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_5",
+        "arrival_idx": 21,
+        "departure_idx": 57,
+        "req_energy_kwh": 58.87,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_8",
+        "arrival_idx": 21,
+        "departure_idx": 65,
+        "req_energy_kwh": 20.64,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_38",
+        "arrival_idx": 22,
+        "departure_idx": 67,
+        "req_energy_kwh": 18.5,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_48",
+        "arrival_idx": 22,
+        "departure_idx": 44,
+        "req_energy_kwh": 20.21,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_28",
+        "arrival_idx": 25,
+        "departure_idx": 65,
+        "req_energy_kwh": 17.62,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_9",
+        "arrival_idx": 26,
+        "departure_idx": 68,
+        "req_energy_kwh": 37.49,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_40",
+        "arrival_idx": 26,
+        "departure_idx": 44,
+        "req_energy_kwh": 21.44,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_10",
+        "arrival_idx": 27,
+        "departure_idx": 70,
+        "req_energy_kwh": 19.33,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_24",
+        "arrival_idx": 30,
+        "departure_idx": 61,
+        "req_energy_kwh": 18.53,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_47",
+        "arrival_idx": 31,
+        "departure_idx": 50,
+        "req_energy_kwh": 56.53,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_34",
+        "arrival_idx": 32,
+        "departure_idx": 74,
+        "req_energy_kwh": 13.48,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_37",
+        "arrival_idx": 33,
+        "departure_idx": 49,
+        "req_energy_kwh": 24.88,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_39",
+        "arrival_idx": 34,
+        "departure_idx": 61,
+        "req_energy_kwh": 46.41,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_4",
+        "arrival_idx": 35,
+        "departure_idx": 58,
+        "req_energy_kwh": 26.16,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_19",
+        "arrival_idx": 35,
+        "departure_idx": 68,
+        "req_energy_kwh": 47.34,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_41",
+        "arrival_idx": 36,
+        "departure_idx": 66,
+        "req_energy_kwh": 49.25,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_0",
+        "arrival_idx": 38,
+        "departure_idx": 73,
+        "req_energy_kwh": 31.01,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_2",
+        "arrival_idx": 38,
+        "departure_idx": 79,
+        "req_energy_kwh": 15.12,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_35",
+        "arrival_idx": 38,
+        "departure_idx": 79,
+        "req_energy_kwh": 26.85,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_46",
+        "arrival_idx": 38,
+        "departure_idx": 70,
+        "req_energy_kwh": 18.29,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_26",
+        "arrival_idx": 39,
+        "departure_idx": 75,
+        "req_energy_kwh": 19.77,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_21",
+        "arrival_idx": 41,
+        "departure_idx": 60,
+        "req_energy_kwh": 29.43,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_1",
+        "arrival_idx": 42,
+        "departure_idx": 65,
+        "req_energy_kwh": 44.95,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_49",
+        "arrival_idx": 42,
+        "departure_idx": 86,
+        "req_energy_kwh": 31.08,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_6",
+        "arrival_idx": 43,
+        "departure_idx": 88,
+        "req_energy_kwh": 16.25,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_29",
+        "arrival_idx": 44,
+        "departure_idx": 68,
+        "req_energy_kwh": 33.61,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_30",
+        "arrival_idx": 44,
+        "departure_idx": 60,
+        "req_energy_kwh": 12.31,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_11",
+        "arrival_idx": 46,
+        "departure_idx": 91,
+        "req_energy_kwh": 29.99,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_18",
+        "arrival_idx": 46,
+        "departure_idx": 64,
+        "req_energy_kwh": 30.19,
+        "max_power_kw": 11,
+        "is_priority": true
+      }
+    ],
+    "S6": [
+      {
+        "id": "EV_4",
+        "arrival_idx": 0,
+        "departure_idx": 27,
+        "req_energy_kwh": 24.23,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_21",
+        "arrival_idx": 0,
+        "departure_idx": 42,
+        "req_energy_kwh": 25.28,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_26",
+        "arrival_idx": 2,
+        "departure_idx": 18,
+        "req_energy_kwh": 26.43,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_58",
+        "arrival_idx": 2,
+        "departure_idx": 37,
+        "req_energy_kwh": 29.74,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_35",
+        "arrival_idx": 6,
+        "departure_idx": 51,
+        "req_energy_kwh": 26.63,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_52",
+        "arrival_idx": 7,
+        "departure_idx": 54,
+        "req_energy_kwh": 22.36,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_53",
+        "arrival_idx": 10,
+        "departure_idx": 53,
+        "req_energy_kwh": 50.07,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_16",
+        "arrival_idx": 13,
+        "departure_idx": 59,
+        "req_energy_kwh": 30.44,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_48",
+        "arrival_idx": 15,
+        "departure_idx": 31,
+        "req_energy_kwh": 15.01,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_10",
+        "arrival_idx": 17,
+        "departure_idx": 58,
+        "req_energy_kwh": 18.09,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_7",
+        "arrival_idx": 18,
+        "departure_idx": 45,
+        "req_energy_kwh": 41.78,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_40",
+        "arrival_idx": 19,
+        "departure_idx": 46,
+        "req_energy_kwh": 17.04,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_51",
+        "arrival_idx": 19,
+        "departure_idx": 66,
+        "req_energy_kwh": 26.11,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_59",
+        "arrival_idx": 23,
+        "departure_idx": 58,
+        "req_energy_kwh": 25.66,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_15",
+        "arrival_idx": 25,
+        "departure_idx": 52,
+        "req_energy_kwh": 57.73,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_28",
+        "arrival_idx": 25,
+        "departure_idx": 50,
+        "req_energy_kwh": 20.79,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_46",
+        "arrival_idx": 26,
+        "departure_idx": 58,
+        "req_energy_kwh": 26.56,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_3",
+        "arrival_idx": 29,
+        "departure_idx": 50,
+        "req_energy_kwh": 22.53,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_45",
+        "arrival_idx": 31,
+        "departure_idx": 69,
+        "req_energy_kwh": 47.71,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_56",
+        "arrival_idx": 32,
+        "departure_idx": 63,
+        "req_energy_kwh": 31.31,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_23",
+        "arrival_idx": 33,
+        "departure_idx": 49,
+        "req_energy_kwh": 24.88,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_32",
+        "arrival_idx": 33,
+        "departure_idx": 58,
+        "req_energy_kwh": 28.16,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_44",
+        "arrival_idx": 33,
+        "departure_idx": 69,
+        "req_energy_kwh": 21.79,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_47",
+        "arrival_idx": 33,
+        "departure_idx": 54,
+        "req_energy_kwh": 37.46,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_2",
+        "arrival_idx": 34,
+        "departure_idx": 71,
+        "req_energy_kwh": 13.13,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_8",
+        "arrival_idx": 34,
+        "departure_idx": 54,
+        "req_energy_kwh": 24.15,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_25",
+        "arrival_idx": 34,
+        "departure_idx": 50,
+        "req_energy_kwh": 36.86,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_31",
+        "arrival_idx": 35,
+        "departure_idx": 63,
+        "req_energy_kwh": 25.39,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_50",
+        "arrival_idx": 35,
+        "departure_idx": 69,
+        "req_energy_kwh": 26.22,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_24",
+        "arrival_idx": 36,
+        "departure_idx": 54,
+        "req_energy_kwh": 23.83,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_30",
+        "arrival_idx": 36,
+        "departure_idx": 74,
+        "req_energy_kwh": 24.09,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_43",
+        "arrival_idx": 36,
+        "departure_idx": 83,
+        "req_energy_kwh": 56.56,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_33",
+        "arrival_idx": 37,
+        "departure_idx": 80,
+        "req_energy_kwh": 52.64,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_9",
+        "arrival_idx": 38,
+        "departure_idx": 71,
+        "req_energy_kwh": 58.08,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_19",
+        "arrival_idx": 38,
+        "departure_idx": 62,
+        "req_energy_kwh": 51.46,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_29",
+        "arrival_idx": 38,
+        "departure_idx": 70,
+        "req_energy_kwh": 34.29,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_13",
+        "arrival_idx": 39,
+        "departure_idx": 58,
+        "req_energy_kwh": 34.19,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_17",
+        "arrival_idx": 39,
+        "departure_idx": 75,
+        "req_energy_kwh": 37.08,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_22",
+        "arrival_idx": 40,
+        "departure_idx": 83,
+        "req_energy_kwh": 29.26,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_37",
+        "arrival_idx": 40,
+        "departure_idx": 85,
+        "req_energy_kwh": 30.83,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_39",
+        "arrival_idx": 40,
+        "departure_idx": 75,
+        "req_energy_kwh": 36.14,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_57",
+        "arrival_idx": 40,
+        "departure_idx": 64,
+        "req_energy_kwh": 35.6,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_14",
+        "arrival_idx": 41,
+        "departure_idx": 60,
+        "req_energy_kwh": 15.7,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_54",
+        "arrival_idx": 41,
+        "departure_idx": 59,
+        "req_energy_kwh": 16.57,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_1",
+        "arrival_idx": 42,
+        "departure_idx": 68,
+        "req_energy_kwh": 54.98,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_20",
+        "arrival_idx": 42,
+        "departure_idx": 76,
+        "req_energy_kwh": 26.14,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_34",
+        "arrival_idx": 42,
+        "departure_idx": 89,
+        "req_energy_kwh": 28.15,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_38",
+        "arrival_idx": 43,
+        "departure_idx": 82,
+        "req_energy_kwh": 30.86,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_18",
+        "arrival_idx": 44,
+        "departure_idx": 68,
+        "req_energy_kwh": 17.93,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_36",
+        "arrival_idx": 44,
+        "departure_idx": 68,
+        "req_energy_kwh": 18.1,
+        "max_power_kw": 11,
+        "is_priority": false
+      },
+      {
+        "id": "EV_27",
+        "arrival_idx": 45,
+        "departure_idx": 67,
+        "req_energy_kwh": 24.02,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_0",
+        "arrival_idx": 46,
+        "departure_idx": 72,
+        "req_energy_kwh": 27.59,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_11",
+        "arrival_idx": 46,
+        "departure_idx": 89,
+        "req_energy_kwh": 27.08,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_12",
+        "arrival_idx": 46,
+        "departure_idx": 64,
+        "req_energy_kwh": 30.19,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_6",
+        "arrival_idx": 47,
+        "departure_idx": 77,
+        "req_energy_kwh": 21.12,
+        "max_power_kw": 11,
+        "is_priority": true
+      },
+      {
+        "id": "EV_49",
+        "arrival_idx": 47,
+        "departure_idx": 91,
+        "req_energy_kwh": 54.69,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_55",
+        "arrival_idx": 47,
+        "departure_idx": 87,
+        "req_energy_kwh": 41.87,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_5",
+        "arrival_idx": 48,
+        "departure_idx": 90,
+        "req_energy_kwh": 45.44,
+        "max_power_kw": 22,
+        "is_priority": true
+      },
+      {
+        "id": "EV_41",
+        "arrival_idx": 48,
+        "departure_idx": 68,
+        "req_energy_kwh": 33.18,
+        "max_power_kw": 22,
+        "is_priority": false
+      },
+      {
+        "id": "EV_42",
+        "arrival_idx": 48,
+        "departure_idx": 65,
+        "req_energy_kwh": 22.05,
+        "max_power_kw": 11,
+        "is_priority": false
+      }
+    ]
+  }
+}

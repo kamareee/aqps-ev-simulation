@@ -1,1040 +1,705 @@
-"""
-Phase 5: Comprehensive Simulation Studies for AQPS
-
-This module implements the complete simulation study comparing AQPS against
-LLF baseline across six scenarios (S1-S6) with publication-quality visualization.
-
-Scenarios:
-- S1: Baseline (27% priority, uniform arrivals)
-- S2: Low Priority (10% priority, uniform arrivals)
-- S3: High Priority (50% priority, uniform arrivals)
-- S4: Morning Rush (27% priority, clustered AM arrivals)
-- S5: Cloudy Day (27% priority, reduced PV generation)
-- S6: Peak Stress (50% priority, PM clustering)
-
-Metrics:
-- Priority fulfillment rate (target: 100%)
-- Non-priority energy delivery percentage
-- Total energy cost vs uncontrolled baseline
-- Computation time vs LLF baseline
-- Preemption frequency
-- Threshold violation conditions
-
-Author: Research Team
-Phase: 5 (Simulation Studies & Analysis)
-"""
+# pylint: disable=missing-module-docstring,missing-class-docstring,missing-function-docstring
 
 import os
-import sys
-import time
+import json
+import csv
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-from typing import Dict, List, Tuple, Optional
-from dataclasses import dataclass
-import logging
+from datetime import datetime
 
-# Import AQPS modules (from local directory)
-from src.aqps.data_structures import (
-    SessionInfo,
-    AQPSConfig,
-    Phase3Config,
-    Phase4Config,
-    J1772_PILOT_SIGNALS,
-)
-from src.aqps.scheduler import AdaptiveQueuingPriorityScheduler
-from src.aqps.scenario_generator import generate_scenario
-from src.aqps.renewable_integration import (
-    generate_typical_pv_profile,
-    generate_typical_bess_profile,
-)
+from src.aqps.scheduler import AQPSScheduler
+from src.aqps.data_structures import Vehicle
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
-
-# Suppress matplotlib font warnings
-logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)
-
-# Create results directory
-RESULTS_DIR = "results"
+RESULTS_DIR = "results_resubmission"
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
 
-@dataclass
-class SimulationResult:
-    """Results from a single scenario simulation."""
-
-    scenario_name: str
-    algorithm: str  # 'AQPS' or 'LLF'
-
-    # Session statistics
-    total_sessions: int
-    priority_sessions: int
-    non_priority_sessions: int
-
-    # Fulfillment metrics
-    priority_fulfilled: int
-    priority_fulfillment_rate: float
-    non_priority_energy_delivered_pct: float
-
-    # Cost metrics
-    total_energy_delivered_kwh: float
-    total_energy_cost: float
-
-    # Operational metrics
-    total_preemptions: int
-    total_threshold_violations: int
-    total_deferrals: int
-
-    # Computational metrics
-    avg_schedule_time_ms: float
-    max_schedule_time_ms: float
-    total_schedule_time_ms: float
-
-    # Quantization metrics (AQPS only)
-    quantization_efficiency_avg: float
-
-    # Additional data
-    capacity_utilization_avg: float
-
-
 # =============================================================================
-# LLF (Least-Laxity-First) Baseline Algorithm
+# Baseline LLF Scheduler (from v1)
 # =============================================================================
+class LLFScheduler:
+    def __init__(self, num_chargers, grid_limit):
+        self.num_chargers = num_chargers
+        self.grid_limit = grid_limit
+        self.active_vehicles = []
 
+    def step(self, time_idx, arriving, departing_ids, current_cap):
+        # 1. Update List
+        self.active_vehicles = [
+            v for v in self.active_vehicles if v.id not in departing_ids
+        ]
+        self.active_vehicles.extend(arriving)
 
-class LeastLaxityFirstScheduler:
-    """
-    Simple Least-Laxity-First (LLF) baseline algorithm.
+        # 2. Calculate Laxity
+        # Laxity = (Time Remaining) - (Time needed to charge at max power)
+        for v in self.active_vehicles:
+            time_rem = (v.departure_time_idx - time_idx) * 0.25
+            if time_rem <= 0:
+                laxity = -999
+            else:
+                time_to_charge = v.energy_needed / v.max_charging_power_kw
+                laxity = time_rem - time_to_charge
+            v.laxity = laxity
 
-    This serves as a baseline comparison for AQPS. LLF:
-    - Sorts all sessions by laxity (lowest first)
-    - Allocates capacity in laxity order
-    - No priority guarantees
-    - No TOU optimization
-    - No quantization
-    """
+        # 3. Sort by Laxity (Ascending)
+        self.active_vehicles.sort(key=lambda x: x.laxity)
 
-    def __init__(
-        self,
-        total_capacity: float = 600.0,
-        voltage: float = 415.0,
-        period_minutes: float = 5.0,
-    ):
-        self.total_capacity = total_capacity
-        self.voltage = voltage
-        self.period_minutes = period_minutes
-        self.schedule_times: List[float] = []
+        # 4. Allocate
+        commands = {}
+        total_power = 0.0
 
-    def schedule(
-        self, sessions: List[SessionInfo], current_time: int
-    ) -> Dict[str, float]:
-        """Generate schedule using LLF policy."""
-        start = time.perf_counter()
+        candidates = self.active_vehicles[: self.num_chargers]
+        remaining_cap = current_cap
 
-        if not sessions:
-            return {}
-
-        # Calculate laxity for all sessions
-        from src.aqps.utils import calculate_laxity
-
-        sessions_with_laxity = []
-        for session in sessions:
-            laxity = calculate_laxity(
-                session, current_time, self.voltage, self.period_minutes
-            )
-            sessions_with_laxity.append((session, laxity))
-
-        # Sort by laxity (lowest first)
-        sessions_with_laxity.sort(key=lambda x: x[1])
-
-        # Fair-share allocation
-        schedule = {}
-        remaining_capacity = self.total_capacity
-        n_sessions = len(sessions)
-
-        for session, laxity in sessions_with_laxity:
-            if remaining_capacity <= 0:
-                schedule[session.station_id] = 0.0
+        for v in candidates:
+            if remaining_cap <= 0:
+                commands[v.id] = 0.0
                 continue
 
-            fair_share = remaining_capacity / n_sessions
-            desired_rate = min(fair_share, session.max_rate)
-            allocated = min(desired_rate, remaining_capacity)
+            p_cmd = min(v.max_charging_power_kw, remaining_cap)
 
-            schedule[session.station_id] = allocated
-            remaining_capacity -= allocated
-            n_sessions -= 1
+            if v.energy_needed <= 0.01:
+                p_cmd = 0.0
 
-        elapsed = (time.perf_counter() - start) * 1000.0
-        self.schedule_times.append(elapsed)
+            commands[v.id] = p_cmd
+            remaining_cap -= p_cmd
+            total_power += p_cmd
 
-        return schedule
+            # Update state internally for LLF
+            v.energy_delivered += p_cmd * 0.25
+            v.energy_needed = max(0.0, v.target_energy_kwh - v.energy_delivered)
 
-    def get_computational_statistics(self) -> Dict:
-        """Get computational statistics."""
-        if not self.schedule_times:
-            return {
-                "avg_time_ms": 0.0,
-                "max_time_ms": 0.0,
-                "total_time_ms": 0.0,
-            }
+        return {"commands": commands, "grid_power": total_power}
 
-        return {
-            "avg_time_ms": np.mean(self.schedule_times),
-            "max_time_ms": np.max(self.schedule_times),
-            "total_time_ms": np.sum(self.schedule_times),
-        }
+
+# =============================================================================
+# Helper Functions
+# =============================================================================
+def parse_dt_to_idx(dt_str):
+    dt = datetime.fromisoformat(dt_str)
+    return int((dt.hour * 60 + dt.minute) // 15)
+
+
+def create_vehicle_map(ev_data):
+    """Creates a fresh map of Vehicle objects for clean simulation state."""
+    vehicles_map = {}
+    for ev in ev_data:
+        v = Vehicle(
+            id=ev["id"],
+            arrival_time_idx=parse_dt_to_idx(ev["arrival"]),
+            departure_time_idx=parse_dt_to_idx(ev["departure"]),
+            target_energy_kwh=ev["req_energy"],
+            max_charging_power_kw=ev["p_max"],
+            is_priority=(ev["priority"] == "High"),
+        )
+        v.energy_delivered = 0.0
+        v.energy_needed = v.target_energy_kwh
+        vehicles_map[v.id] = v
+    return vehicles_map
 
 
 # =============================================================================
 # Simulation Runner
 # =============================================================================
-
-
-def run_simulation(
-    sessions: List[SessionInfo],
-    scheduler,
-    scenario_name: str,
-    algorithm_name: str,
-    n_periods: int = 288,
-    voltage: float = 415.0,
-    period_minutes: float = 5.0,
-) -> SimulationResult:
-    """
-    Run a complete simulation for given sessions and scheduler.
-
-    Args:
-        sessions: List of charging sessions
-        scheduler: Scheduler instance (AQPS or LLF)
-        scenario_name: Name of scenario
-        algorithm_name: 'AQPS' or 'LLF'
-        n_periods: Number of simulation periods
-        voltage: System voltage
-        period_minutes: Period duration
-
-    Returns:
-        SimulationResult with comprehensive metrics
-    """
-    logger.info(f"Running {algorithm_name} simulation for {scenario_name}")
-
-    # Track session energy delivered
-    session_energy: Dict[str, float] = {s.session_id: 0.0 for s in sessions}
-
-    # Run simulation
-    for t in range(n_periods):
-        # Get active sessions
-        active = [s for s in sessions if s.arrival_time <= t < s.departure_time]
-
-        if not active:
-            continue
-
-        # Generate schedule
-        schedule = scheduler.schedule(active, t)
-
-        # Update session charges
-        hours_per_period = period_minutes / 60.0
-        for session in active:
-            rate = schedule.get(session.station_id, 0.0)
-            power_kw = (rate * voltage) / 1000.0
-            energy = power_kw * hours_per_period
-
-            session_energy[session.session_id] += energy
-            session.current_charge += energy
-
-    # Calculate fulfillment metrics
-    priority_sessions = [s for s in sessions if s.is_priority]
-    non_priority_sessions = [s for s in sessions if not s.is_priority]
-
-    priority_fulfilled = sum(
-        1
-        for s in priority_sessions
-        if session_energy[s.session_id] >= s.energy_requested * 0.99
+def run_scenario(fleet_size, scenario_key, scenario_label, ev_data, env_data):
+    print(
+        f"\n[{scenario_label}] Initializing simulation horizon for {fleet_size} EVs..."
     )
 
-    priority_fulfillment_rate = (
-        priority_fulfilled / len(priority_sessions) * 100
-        if priority_sessions
-        else 100.0
-    )
-
-    # Non-priority energy delivered percentage
-    if non_priority_sessions:
-        total_requested = sum(s.energy_requested for s in non_priority_sessions)
-        total_delivered = sum(
-            session_energy[s.session_id] for s in non_priority_sessions
-        )
-        non_priority_pct = (
-            (total_delivered / total_requested * 100) if total_requested > 0 else 100.0
-        )
-    else:
-        non_priority_pct = 100.0
-
-    # Total energy delivered
-    total_energy_kwh = sum(session_energy.values())
-
-    # Get algorithm-specific metrics
-    if algorithm_name == "AQPS":
-        comp_stats = scheduler.get_computational_statistics()
-        preempt_stats = scheduler.get_preemption_statistics()
-        threshold_stats = scheduler.get_threshold_statistics()
-        tou_stats = scheduler.get_tou_statistics()
-        quant_stats = scheduler.get_quantization_statistics()
-
-        # Get summary
-        summary = scheduler.get_simulation_summary()
-
-        result = SimulationResult(
-            scenario_name=scenario_name,
-            algorithm="AQPS",
-            total_sessions=len(sessions),
-            priority_sessions=len(priority_sessions),
-            non_priority_sessions=len(non_priority_sessions),
-            priority_fulfilled=priority_fulfilled,
-            priority_fulfillment_rate=priority_fulfillment_rate,
-            non_priority_energy_delivered_pct=non_priority_pct,
-            total_energy_delivered_kwh=total_energy_kwh,
-            total_energy_cost=0.0,  # Would need TOU cost calculation
-            total_preemptions=preempt_stats.get("total_preemptions", 0),
-            total_threshold_violations=threshold_stats.get("total_violations", 0),
-            total_deferrals=tou_stats.get("total_deferrals", 0),
-            avg_schedule_time_ms=comp_stats.get("avg_time_ms", 0.0),
-            max_schedule_time_ms=comp_stats.get("max_time_ms", 0.0),
-            total_schedule_time_ms=comp_stats.get("total_time_ms", 0.0),
-            quantization_efficiency_avg=quant_stats.get("avg_efficiency", 100.0),
-            capacity_utilization_avg=summary.avg_capacity_utilization,
-        )
-    else:  # LLF
-        comp_stats = scheduler.get_computational_statistics()
-
-        result = SimulationResult(
-            scenario_name=scenario_name,
-            algorithm="LLF",
-            total_sessions=len(sessions),
-            priority_sessions=len(priority_sessions),
-            non_priority_sessions=len(non_priority_sessions),
-            priority_fulfilled=priority_fulfilled,
-            priority_fulfillment_rate=priority_fulfillment_rate,
-            non_priority_energy_delivered_pct=non_priority_pct,
-            total_energy_delivered_kwh=total_energy_kwh,
-            total_energy_cost=0.0,
-            total_preemptions=0,
-            total_threshold_violations=0,
-            total_deferrals=0,
-            avg_schedule_time_ms=comp_stats.get("avg_time_ms", 0.0),
-            max_schedule_time_ms=comp_stats.get("max_time_ms", 0.0),
-            total_schedule_time_ms=comp_stats.get("total_time_ms", 0.0),
-            quantization_efficiency_avg=100.0,
-            capacity_utilization_avg=0.0,
-        )
-
-    logger.info(
-        f"{algorithm_name} - Priority: {priority_fulfillment_rate:.1f}%, "
-        f"Non-Priority: {non_priority_pct:.1f}%, "
-        f"Avg Time: {result.avg_schedule_time_ms:.3f}ms"
-    )
-
-    return result
-
-
-# =============================================================================
-# Scenario Runners
-# =============================================================================
-
-
-def run_scenario_S1() -> Tuple[SimulationResult, SimulationResult]:
-    """
-    S1: Baseline (27% priority, uniform arrivals)
-
-    Standard operational scenario with balanced priority ratio.
-    """
-    logger.info("=" * 60)
-    logger.info("Running Scenario S1: Baseline")
-    logger.info("=" * 60)
-
-    # Generate sessions
-    sessions_aqps = generate_scenario("S1", n_sessions=45, seed=42)
-    sessions_llf = generate_scenario("S1", n_sessions=45, seed=42)
-
-    # Configure AQPS
-    config = AQPSConfig(
-        min_priority_rate=16.0,
-        total_capacity=560.0,
-        period_minutes=5.0,
-        voltage=415.0,
-        enable_logging=False,
-    )
-
-    phase3_config = Phase3Config(
-        enable_tou_optimization=True,
-        enable_renewable_integration=True,
-        deferral_policy="aggressive",
-    )
-
-    phase4_config = Phase4Config(
-        enable_quantization=True, priority_ceil_enabled=True, enable_timing=True
-    )
-
-    aqps = AdaptiveQueuingPriorityScheduler(config, phase3_config, phase4_config)
-
-    # Configure TOU
-    aqps.configure_tou(
-        peak_price=0.26668, off_peak_price=0.05623, peak_hours=[(8, 10), (16, 18)]
-    )
-
-    # Configure network
-    aqps.configure_network(
-        phase_a_limit=188.0, phase_b_limit=188.0, phase_c_limit=188.0
-    )
-
-    # Run AQPS simulation
-    result_aqps = run_simulation(sessions_aqps, aqps, "S1: Baseline", "AQPS")
-
-    # Configure LLF
-    llf = LeastLaxityFirstScheduler(total_capacity=560.0, voltage=415.0)
-
-    # Run LLF simulation
-    result_llf = run_simulation(sessions_llf, llf, "S1: Baseline", "LLF")
-
-    return result_aqps, result_llf
-
-
-def run_scenario_S2() -> Tuple[SimulationResult, SimulationResult]:
-    """
-    S2: Low Priority (10% priority, uniform arrivals)
-
-    Few urgent vehicles scenario.
-    """
-    logger.info("=" * 60)
-    logger.info("Running Scenario S2: Low Priority")
-    logger.info("=" * 60)
-
-    # Generate sessions
-    sessions_aqps = generate_scenario("S2", n_sessions=45, seed=43)
-    sessions_llf = generate_scenario("S2", n_sessions=45, seed=43)
-
-    # Configure AQPS
-    config = AQPSConfig(
-        min_priority_rate=16.0,
-        total_capacity=560.0,
-        period_minutes=5.0,
-        voltage=415.0,
-        enable_logging=False,
-    )
-
-    phase3_config = Phase3Config(
-        enable_tou_optimization=True, deferral_policy="aggressive"
-    )
-
-    phase4_config = Phase4Config(enable_quantization=True, enable_timing=True)
-
-    aqps = AdaptiveQueuingPriorityScheduler(config, phase3_config, phase4_config)
-    aqps.configure_tou(
-        peak_price=0.26668, off_peak_price=0.05623, peak_hours=[(8, 10), (16, 18)]
-    )
-    aqps.configure_network(188.0, 188.0, 188.0)
-
-    result_aqps = run_simulation(sessions_aqps, aqps, "S2: Low Priority", "AQPS")
-
-    # LLF
-    llf = LeastLaxityFirstScheduler(total_capacity=560.0, voltage=415.0)
-    result_llf = run_simulation(sessions_llf, llf, "S2: Low Priority", "LLF")
-
-    return result_aqps, result_llf
-
-
-def run_scenario_S3() -> Tuple[SimulationResult, SimulationResult]:
-    """
-    S3: High Priority (50% priority, uniform arrivals)
-
-    Many urgent vehicles scenario - tests system limits.
-    """
-    logger.info("=" * 60)
-    logger.info("Running Scenario S3: High Priority")
-    logger.info("=" * 60)
-
-    sessions_aqps = generate_scenario("S3", n_sessions=45, seed=44)
-    sessions_llf = generate_scenario("S3", n_sessions=45, seed=44)
-
-    config = AQPSConfig(
-        min_priority_rate=16.0,
-        total_capacity=560.0,
-        voltage=415.0,
-        enable_logging=False,
-    )
-
-    phase3_config = Phase3Config(enable_tou_optimization=True)
-    phase4_config = Phase4Config(enable_quantization=True, enable_timing=True)
-
-    aqps = AdaptiveQueuingPriorityScheduler(config, phase3_config, phase4_config)
-    aqps.configure_tou(
-        peak_price=0.26668, off_peak_price=0.05623, peak_hours=[(8, 10), (16, 18)]
-    )
-    aqps.configure_network(188.0, 188.0, 188.0)
-
-    result_aqps = run_simulation(sessions_aqps, aqps, "S3: High Priority", "AQPS")
-
-    llf = LeastLaxityFirstScheduler(total_capacity=560.0, voltage=415.0)
-    result_llf = run_simulation(sessions_llf, llf, "S3: High Priority", "LLF")
-
-    return result_aqps, result_llf
-
-
-def run_scenario_S4() -> Tuple[SimulationResult, SimulationResult]:
-    """
-    S4: Morning Rush (27% priority, clustered AM arrivals)
-
-    Clustered morning arrival pattern.
-    """
-    logger.info("=" * 60)
-    logger.info("Running Scenario S4: Morning Rush")
-    logger.info("=" * 60)
-
-    sessions_aqps = generate_scenario("S4", n_sessions=45, seed=45)
-    sessions_llf = generate_scenario("S4", n_sessions=45, seed=45)
-
-    config = AQPSConfig(
-        min_priority_rate=16.0,
-        total_capacity=560.0,
-        voltage=415.0,
-        enable_logging=False,
-    )
-
-    phase3_config = Phase3Config(enable_tou_optimization=True)
-    phase4_config = Phase4Config(enable_quantization=True, enable_timing=True)
-
-    aqps = AdaptiveQueuingPriorityScheduler(config, phase3_config, phase4_config)
-    aqps.configure_tou(
-        peak_price=0.26668, off_peak_price=0.05623, peak_hours=[(8, 10), (16, 18)]
-    )
-    aqps.configure_network(188.0, 188.0, 188.0)
-
-    result_aqps = run_simulation(sessions_aqps, aqps, "S4: Morning Rush", "AQPS")
-
-    llf = LeastLaxityFirstScheduler(total_capacity=560.0, voltage=415.0)
-    result_llf = run_simulation(sessions_llf, llf, "S4: Morning Rush", "LLF")
-
-    return result_aqps, result_llf
-
-
-def run_scenario_S5() -> Tuple[SimulationResult, SimulationResult]:
-    """
-    S5: Cloudy Day (27% priority, reduced PV generation)
-
-    Reduced solar generation scenario.
-    """
-    logger.info("=" * 60)
-    logger.info("Running Scenario S5: Cloudy Day")
-    logger.info("=" * 60)
-
-    sessions_aqps = generate_scenario("S5", n_sessions=45, seed=46)
-    sessions_llf = generate_scenario("S5", n_sessions=45, seed=46)
-
-    config = AQPSConfig(
-        min_priority_rate=16.0,
-        total_capacity=560.0,
-        voltage=415.0,
-        enable_logging=False,
-    )
-
-    phase3_config = Phase3Config(
-        enable_tou_optimization=True, enable_renewable_integration=True
-    )
-    phase4_config = Phase4Config(enable_quantization=True, enable_timing=True)
-
-    aqps = AdaptiveQueuingPriorityScheduler(config, phase3_config, phase4_config)
-    aqps.configure_tou(
-        peak_price=0.26668, off_peak_price=0.05623, peak_hours=[(8, 10), (16, 18)]
-    )
-    aqps.configure_network(188.0, 188.0, 188.0)
-
-    # Configure renewables with REDUCED PV (50% of typical)
-    aqps.configure_renewables(pv_capacity_kwp=100.0, bess_capacity_kwh=200.0)
-
-    # Generate reduced PV profile (50% of typical)
-    typical_pv = generate_typical_pv_profile(periods=288, peak_kw=80.0)
-    reduced_pv = [p * 0.5 for p in typical_pv]  # Cloudy day = 50% generation
-    aqps.load_pv_forecast(reduced_pv)
-
-    # Generate BESS profile
-    soc_vals, power_vals = generate_typical_bess_profile(periods=288)
-    aqps.load_bess_forecast(soc_vals, power_vals)
-
-    result_aqps = run_simulation(sessions_aqps, aqps, "S5: Cloudy Day", "AQPS")
-
-    llf = LeastLaxityFirstScheduler(total_capacity=560.0, voltage=415.0)
-    result_llf = run_simulation(sessions_llf, llf, "S5: Cloudy Day", "LLF")
-
-    return result_aqps, result_llf
-
-
-def run_scenario_S6() -> Tuple[SimulationResult, SimulationResult]:
-    """
-    S6: Peak Stress (50% priority, PM clustering)
-
-    High demand with afternoon clustering - maximum stress test.
-    """
-    logger.info("=" * 60)
-    logger.info("Running Scenario S6: Peak Stress")
-    logger.info("=" * 60)
-
-    sessions_aqps = generate_scenario("S6", n_sessions=45, seed=47)
-    sessions_llf = generate_scenario("S6", n_sessions=45, seed=47)
-
-    config = AQPSConfig(
-        min_priority_rate=16.0,
-        total_capacity=560.0,
-        voltage=415.0,
-        enable_logging=False,
-    )
-
-    phase3_config = Phase3Config(enable_tou_optimization=True)
-    phase4_config = Phase4Config(enable_quantization=True, enable_timing=True)
-
-    aqps = AdaptiveQueuingPriorityScheduler(config, phase3_config, phase4_config)
-    aqps.configure_tou(
-        peak_price=0.26668, off_peak_price=0.05623, peak_hours=[(8, 10), (16, 18)]
-    )
-    aqps.configure_network(188.0, 188.0, 188.0)
-
-    result_aqps = run_simulation(sessions_aqps, aqps, "S6: Peak Stress", "AQPS")
-
-    llf = LeastLaxityFirstScheduler(total_capacity=560.0, voltage=415.0)
-    result_llf = run_simulation(sessions_llf, llf, "S6: Peak Stress", "LLF")
-
-    return result_aqps, result_llf
-
-
-# =============================================================================
-# Visualization Functions
-# =============================================================================
-
-
-def generate_fulfillment_comparison(
-    results: List[Tuple[SimulationResult, SimulationResult]], output_path: str
-):
-    """
-    Generate fulfillment rate comparison plot.
-
-    Shows priority and non-priority fulfillment for AQPS vs LLF across scenarios.
-    """
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
-
-    scenarios = ["S1", "S2", "S3", "S4", "S5", "S6"]
-    x = np.arange(len(scenarios))
-    width = 0.35
-
-    # Extract data
-    aqps_priority = [r[0].priority_fulfillment_rate for r in results]
-    llf_priority = [r[1].priority_fulfillment_rate for r in results]
-    aqps_non_priority = [r[0].non_priority_energy_delivered_pct for r in results]
-    llf_non_priority = [r[1].non_priority_energy_delivered_pct for r in results]
-
-    # Priority fulfillment
-    ax1.bar(
-        x - width / 2, aqps_priority, width, label="AQPS", color="#2E7D32", alpha=0.8
-    )
-    ax1.bar(x + width / 2, llf_priority, width, label="LLF", color="#D32F2F", alpha=0.8)
-    ax1.axhline(
-        y=100,
-        color="black",
-        linestyle="--",
-        linewidth=1,
-        alpha=0.5,
-        label="Target (100%)",
-    )
-    ax1.set_ylabel("Priority Fulfillment Rate (%)", fontsize=12, fontweight="bold")
-    ax1.set_title("Priority EV Fulfillment", fontsize=14, fontweight="bold")
-    ax1.set_xticks(x)
-    ax1.set_xticklabels(scenarios)
-    ax1.legend(fontsize=10)
-    ax1.grid(True, alpha=0.3)
-    ax1.set_ylim([0, 110])
-
-    # Non-priority energy delivery
-    ax2.bar(
-        x - width / 2,
-        aqps_non_priority,
-        width,
-        label="AQPS",
-        color="#1976D2",
-        alpha=0.8,
-    )
-    ax2.bar(
-        x + width / 2, llf_non_priority, width, label="LLF", color="#F57C00", alpha=0.8
-    )
-    ax2.set_ylabel("Energy Delivered (%)", fontsize=12, fontweight="bold")
-    ax2.set_title("Non-Priority EV Energy Delivery", fontsize=14, fontweight="bold")
-    ax2.set_xticks(x)
-    ax2.set_xticklabels(scenarios)
-    ax2.legend(fontsize=10)
-    ax2.grid(True, alpha=0.3)
-    ax2.set_ylim([0, 110])
-
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=300, bbox_inches="tight")
-    plt.close()
-    logger.info(f"Saved fulfillment comparison to {output_path}")
-
-
-def generate_computational_comparison(
-    results: List[Tuple[SimulationResult, SimulationResult]], output_path: str
-):
-    """
-    Generate computational performance comparison.
-
-    Shows average scheduling time for AQPS vs LLF.
-    """
-    fig, ax = plt.subplots(figsize=(10, 6))
-
-    scenarios = ["S1", "S2", "S3", "S4", "S5", "S6"]
-    x = np.arange(len(scenarios))
-    width = 0.35
-
-    aqps_times = [r[0].avg_schedule_time_ms for r in results]
-    llf_times = [r[1].avg_schedule_time_ms for r in results]
-
-    ax.bar(x - width / 2, aqps_times, width, label="AQPS", color="#6A1B9A", alpha=0.8)
-    ax.bar(x + width / 2, llf_times, width, label="LLF", color="#00796B", alpha=0.8)
-
-    ax.set_ylabel("Average Scheduling Time (ms)", fontsize=12, fontweight="bold")
-    ax.set_title("Computational Performance Comparison", fontsize=14, fontweight="bold")
-    ax.set_xticks(x)
-    ax.set_xticklabels(scenarios)
-    ax.legend(fontsize=11)
-    ax.grid(True, alpha=0.3, axis="y")
-
-    # Add speedup annotations
-    for i, (aqps_t, llf_t) in enumerate(zip(aqps_times, llf_times)):
-        if aqps_t < llf_t:
-            speedup = llf_t / aqps_t
-            ax.text(
-                i,
-                max(aqps_t, llf_t) + 0.5,
-                f"{speedup:.1f}x faster",
-                ha="center",
-                fontsize=9,
-                color="green",
-                fontweight="bold",
-            )
-
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=300, bbox_inches="tight")
-    plt.close()
-    logger.info(f"Saved computational comparison to {output_path}")
-
-
-def generate_operational_metrics(
-    results: List[Tuple[SimulationResult, SimulationResult]], output_path: str
-):
-    """
-    Generate operational metrics comparison.
-
-    Shows preemptions, threshold violations, and deferrals for AQPS.
-    """
-    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(16, 5))
-
-    scenarios = ["S1", "S2", "S3", "S4", "S5", "S6"]
-    x = np.arange(len(scenarios))
-
-    preemptions = [r[0].total_preemptions for r in results]
-    violations = [r[0].total_threshold_violations for r in results]
-    deferrals = [r[0].total_deferrals for r in results]
-
-    # Preemptions
-    ax1.bar(x, preemptions, color="#E64A19", alpha=0.8)
-    ax1.set_ylabel("Count", fontsize=12, fontweight="bold")
-    ax1.set_title("Preemption Events", fontsize=14, fontweight="bold")
-    ax1.set_xticks(x)
-    ax1.set_xticklabels(scenarios)
-    ax1.grid(True, alpha=0.3, axis="y")
-
-    # Threshold violations
-    ax2.bar(x, violations, color="#C62828", alpha=0.8)
-    ax2.set_ylabel("Count", fontsize=12, fontweight="bold")
-    ax2.set_title("Threshold Violations", fontsize=14, fontweight="bold")
-    ax2.set_xticks(x)
-    ax2.set_xticklabels(scenarios)
-    ax2.grid(True, alpha=0.3, axis="y")
-
-    # TOU Deferrals
-    ax3.bar(x, deferrals, color="#1565C0", alpha=0.8)
-    ax3.set_ylabel("Count", fontsize=12, fontweight="bold")
-    ax3.set_title("TOU Deferral Events", fontsize=14, fontweight="bold")
-    ax3.set_xticks(x)
-    ax3.set_xticklabels(scenarios)
-    ax3.grid(True, alpha=0.3, axis="y")
-
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=300, bbox_inches="tight")
-    plt.close()
-    logger.info(f"Saved operational metrics to {output_path}")
-
-
-def generate_summary_table(
-    results: List[Tuple[SimulationResult, SimulationResult]], output_path: str
-):
-    """
-    Generate comprehensive summary table as figure.
-    """
-    scenarios = ["S1", "S2", "S3", "S4", "S5", "S6"]
-
-    # Prepare table data
-    table_data = []
-    headers = [
-        "Scenario",
-        "Algorithm",
-        "Priority\nFulfill %",
-        "Non-Priority\nEnergy %",
-        "Avg Time\n(ms)",
-        "Preemptions",
-        "Violations",
-        "Deferrals",
+    horizon = len(env_data["tou_tariff"])
+    dt_hours = env_data.get("step_delta", 0.25)
+
+    num_chargers = int(fleet_size / 3)
+    transformer_limit_kw = (fleet_size / 45) * 150.0
+
+    config = {
+        "station": {"num_chargers": num_chargers},
+        "grid": {"transformer_limit_kw": transformer_limit_kw},
+        "simulation": {"dt_hours": dt_hours, "planning_horizon_steps": 12},
+    }
+
+    # Initialize Schedulers
+    aqps = AQPSScheduler(config)
+    llf = LLFScheduler(num_chargers, transformer_limit_kw)
+
+    # Initialize distinct vehicle sets to prevent cross-contamination
+    vehicles_aqps = create_vehicle_map(ev_data)
+    vehicles_llf = create_vehicle_map(ev_data)
+
+    # Metrics Tracking
+    time_steps = []
+    priority_arrivals = [
+        v.arrival_time_idx for v in vehicles_aqps.values() if v.is_priority
     ]
 
-    for i, (r_aqps, r_llf) in enumerate(results):
-        # AQPS row
-        table_data.append(
-            [
-                scenarios[i],
-                "AQPS",
-                f"{r_aqps.priority_fulfillment_rate:.1f}",
-                f"{r_aqps.non_priority_energy_delivered_pct:.1f}",
-                f"{r_aqps.avg_schedule_time_ms:.2f}",
-                f"{r_aqps.total_preemptions}",
-                f"{r_aqps.total_threshold_violations}",
-                f"{r_aqps.total_deferrals}",
-            ]
+    aqps_cost_history, llf_cost_history = [], []
+    current_cost_aqps, current_cost_llf = 0.0, 0.0
+
+    aqps_preemptions = []
+    llf_starvations = []
+
+    prev_cmds_aqps = {}
+
+    for t in range(horizon):
+        tou = np.array(env_data["tou_tariff"][t:] + [env_data["tou_tariff"][-1]] * t)
+        pv = np.array(env_data["pv_forecast"][t:] + [0.0] * t)
+        bess = np.array([0.0] * len(tou))
+        current_cap_llf = transformer_limit_kw + pv[0]
+
+        # ---------------------------------------------------------------------
+        # 1. Run AQPS
+        # ---------------------------------------------------------------------
+        arriving_aqps = [v for v in vehicles_aqps.values() if v.arrival_time_idx == t]
+        departing_aqps = [
+            v.id for v in vehicles_aqps.values() if v.departure_time_idx == t
+        ]
+
+        step_res_aqps = aqps.step(t, arriving_aqps, departing_aqps, tou, pv, bess)
+        cmds_aqps = step_res_aqps.get("commands", {})
+
+        # Update AQPS Energy & Track Preemptions
+        priority_arriving_now = any(v.is_priority for v in arriving_aqps)
+        for v_id, p_cmd in cmds_aqps.items():
+            if v_id in vehicles_aqps:
+                vehicles_aqps[v_id].energy_delivered += p_cmd * dt_hours
+
+        for v in vehicles_aqps.values():
+            if not v.is_priority and v.arrival_time_idx <= t < v.departure_time_idx:
+                still_needs_energy = (v.target_energy_kwh - v.energy_delivered) > 0.5
+                was_charging = prev_cmds_aqps.get(v.id, 0) > 0.0
+                is_cut_off = cmds_aqps.get(v.id, 0) == 0.0
+                if (
+                    was_charging
+                    and is_cut_off
+                    and still_needs_energy
+                    and priority_arriving_now
+                ):
+                    aqps_preemptions.append(t)
+        prev_cmds_aqps = cmds_aqps
+
+        grid_p_aqps = max(0.0, sum(cmds_aqps.values()) - pv[0])
+        current_cost_aqps += grid_p_aqps * tou[0] * dt_hours
+        aqps_cost_history.append(current_cost_aqps)
+
+        # ---------------------------------------------------------------------
+        # 2. Run LLF
+        # ---------------------------------------------------------------------
+        arriving_llf = [v for v in vehicles_llf.values() if v.arrival_time_idx == t]
+        departing_llf = [
+            v.id for v in vehicles_llf.values() if v.departure_time_idx == t
+        ]
+
+        step_res_llf = llf.step(t, arriving_llf, departing_llf, current_cap_llf)
+        cmds_llf = step_res_llf.get("commands", {})
+
+        # Track LLF Starvation Events (Priority EV needs charge but gets 0 power)
+        for v in vehicles_llf.values():
+            if v.is_priority and v.arrival_time_idx <= t < v.departure_time_idx:
+                if v.energy_needed > 0.5 and cmds_llf.get(v.id, 0) == 0.0:
+                    llf_starvations.append(t)
+
+        grid_p_llf = max(0.0, step_res_llf["grid_power"] - pv[0])
+        current_cost_llf += grid_p_llf * tou[0] * dt_hours
+        llf_cost_history.append(current_cost_llf)
+
+        time_steps.append(t)
+
+    # ---------------------------------------------------------------------
+    # Fulfillment Calculation
+    # ---------------------------------------------------------------------
+    def calc_fulfillment(vehicles_dict, is_priority_filter):
+        req = sum(
+            v.target_energy_kwh
+            for v in vehicles_dict.values()
+            if v.is_priority == is_priority_filter
         )
-
-        # LLF row
-        table_data.append(
-            [
-                "",
-                "LLF",
-                f"{r_llf.priority_fulfillment_rate:.1f}",
-                f"{r_llf.non_priority_energy_delivered_pct:.1f}",
-                f"{r_llf.avg_schedule_time_ms:.2f}",
-                "-",
-                "-",
-                "-",
-            ]
+        deliv = sum(
+            v.energy_delivered
+            for v in vehicles_dict.values()
+            if v.is_priority == is_priority_filter
         )
+        return (deliv / req * 100) if req > 0 else 100.0
 
-    # Create figure
-    fig, ax = plt.subplots(figsize=(14, 8))
-    ax.axis("tight")
-    ax.axis("off")
-
-    table = ax.table(
-        cellText=table_data,
-        colLabels=headers,
-        cellLoc="center",
-        loc="center",
-        colWidths=[0.12, 0.12, 0.14, 0.14, 0.12, 0.12, 0.12, 0.12],
+    priority_ratio = (
+        len([v for v in vehicles_aqps.values() if v.is_priority])
+        / len(vehicles_aqps)
+        * 100
     )
 
-    table.auto_set_font_size(False)
-    table.set_fontsize(10)
-    table.scale(1, 2)
-
-    # Style header
-    for i in range(len(headers)):
-        cell = table[(0, i)]
-        cell.set_facecolor("#2E7D32")
-        cell.set_text_props(weight="bold", color="white")
-
-    # Style cells
-    for i in range(1, len(table_data) + 1):
-        for j in range(len(headers)):
-            cell = table[(i, j)]
-            if table_data[i - 1][1] == "AQPS":
-                cell.set_facecolor("#E8F5E9")
-            else:
-                cell.set_facecolor("#FFEBEE")
-
-    plt.title("Performance Summary Table", fontsize=16, fontweight="bold", pad=20)
-    plt.savefig(output_path, dpi=300, bbox_inches="tight")
-    plt.close()
-    logger.info(f"Saved summary table to {output_path}")
+    print(f"[{scenario_label}] Simulation complete.")
+    return {
+        "fleet_size": fleet_size,
+        "scenario_key": scenario_key,
+        "scenario_label": scenario_label,
+        "priority_ratio": priority_ratio,
+        "time_steps": time_steps,
+        "priority_arrivals": priority_arrivals,
+        "aqps": {
+            "priority_fulfillment": calc_fulfillment(vehicles_aqps, True),
+            "non_priority_fulfillment": calc_fulfillment(vehicles_aqps, False),
+            "cumulative_cost": aqps_cost_history,
+            "preemptions": list(set(aqps_preemptions)),
+        },
+        "llf": {
+            "priority_fulfillment": calc_fulfillment(vehicles_llf, True),
+            "non_priority_fulfillment": calc_fulfillment(vehicles_llf, False),
+            "cumulative_cost": llf_cost_history,
+            "starvations": list(set(llf_starvations)),
+        },
+    }
 
 
-def generate_scenario_detail_plot(
-    result_aqps: SimulationResult, result_llf: SimulationResult, output_path: str
-):
-    """
-    Generate detailed comparison plot for a single scenario.
-    """
-    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(14, 10))
+def execute_configuration(fleet_size: int):
+    filename = f"simulation_data_{fleet_size}EVs.json"
+    try:
+        with open(filename, "r") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        print(f"Error: {filename} not found. Please run data_generator.py first.")
+        return []
 
-    scenario = result_aqps.scenario_name
-
-    # Subplot 1: Fulfillment rates
-    metrics = ["Priority\nFulfillment", "Non-Priority\nEnergy"]
-    aqps_vals = [
-        result_aqps.priority_fulfillment_rate,
-        result_aqps.non_priority_energy_delivered_pct,
-    ]
-    llf_vals = [
-        result_llf.priority_fulfillment_rate,
-        result_llf.non_priority_energy_delivered_pct,
+    env_data = data["environment"]
+    scenarios = [
+        ("S1_Baseline", "S1 (27%)"),
+        ("S3_HighPriority", "S3 (50%)"),
+        ("S6_PeakStress", "S6 (50% Peak Stress)"),
     ]
 
-    x = np.arange(len(metrics))
-    width = 0.35
-
-    ax1.bar(x - width / 2, aqps_vals, width, label="AQPS", color="#2E7D32", alpha=0.8)
-    ax1.bar(x + width / 2, llf_vals, width, label="LLF", color="#D32F2F", alpha=0.8)
-    ax1.set_ylabel("Percentage (%)", fontsize=11, fontweight="bold")
-    ax1.set_title("Fulfillment Metrics", fontsize=12, fontweight="bold")
-    ax1.set_xticks(x)
-    ax1.set_xticklabels(metrics)
-    ax1.legend()
-    ax1.grid(True, alpha=0.3, axis="y")
-    ax1.set_ylim([0, 110])
-
-    # Subplot 2: Computational time
-    ax2.bar(
-        ["AQPS", "LLF"],
-        [result_aqps.avg_schedule_time_ms, result_llf.avg_schedule_time_ms],
-        color=["#6A1B9A", "#00796B"],
-        alpha=0.8,
-    )
-    ax2.set_ylabel("Time (ms)", fontsize=11, fontweight="bold")
-    ax2.set_title("Average Scheduling Time", fontsize=12, fontweight="bold")
-    ax2.grid(True, alpha=0.3, axis="y")
-
-    # Subplot 3: AQPS operational metrics
-    ops_metrics = ["Preemptions", "Violations", "Deferrals"]
-    ops_vals = [
-        result_aqps.total_preemptions,
-        result_aqps.total_threshold_violations,
-        result_aqps.total_deferrals,
-    ]
-
-    colors = ["#E64A19", "#C62828", "#1565C0"]
-    ax3.bar(ops_metrics, ops_vals, color=colors, alpha=0.8)
-    ax3.set_ylabel("Count", fontsize=11, fontweight="bold")
-    ax3.set_title("AQPS Operational Events", fontsize=12, fontweight="bold")
-    ax3.grid(True, alpha=0.3, axis="y")
-
-    # Subplot 4: Session breakdown
-    session_types = ["Priority", "Non-Priority"]
-    counts = [result_aqps.priority_sessions, result_aqps.non_priority_sessions]
-
-    ax4.pie(
-        counts,
-        labels=session_types,
-        autopct="%1.1f%%",
-        colors=["#2E7D32", "#1976D2"],
-        startangle=90,
-    )
-    ax4.set_title("Session Distribution", fontsize=12, fontweight="bold")
-
-    fig.suptitle(scenario, fontsize=16, fontweight="bold", y=0.98)
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=300, bbox_inches="tight")
-    plt.close()
-    logger.info(f"Saved scenario detail to {output_path}")
-
-
-# =============================================================================
-# Main Execution
-# =============================================================================
-
-
-def main():
-    """
-    Run complete Phase 5 simulation study.
-    """
-    logger.info("=" * 80)
-    logger.info("PHASE 5: COMPREHENSIVE SIMULATION STUDIES")
-    logger.info("=" * 80)
-
-    # Run all scenarios
-    logger.info("\nRunning all scenarios...")
     results = []
-
-    results.append(run_scenario_S1())
-    results.append(run_scenario_S2())
-    results.append(run_scenario_S3())
-    results.append(run_scenario_S4())
-    results.append(run_scenario_S5())
-    results.append(run_scenario_S6())
-
-    # Generate comparison plots
-    logger.info("\n" + "=" * 80)
-    logger.info("Generating publication-quality visualizations...")
-    logger.info("=" * 80)
-
-    comparison_dir = os.path.join(RESULTS_DIR, "comparison")
-    os.makedirs(comparison_dir, exist_ok=True)
-
-    generate_fulfillment_comparison(
-        results, os.path.join(comparison_dir, "fulfillment_comparison.png")
-    )
-
-    generate_computational_comparison(
-        results, os.path.join(comparison_dir, "computational_comparison.png")
-    )
-
-    generate_operational_metrics(
-        results, os.path.join(comparison_dir, "operational_metrics.png")
-    )
-
-    generate_summary_table(results, os.path.join(comparison_dir, "summary_table.png"))
-
-    # Generate individual scenario details
-    scenario_names = [
-        "S1_baseline",
-        "S2_low_priority",
-        "S3_high_priority",
-        "S4_morning_rush",
-        "S5_cloudy_day",
-        "S6_peak_stress",
-    ]
-
-    for i, (name, (r_aqps, r_llf)) in enumerate(zip(scenario_names, results)):
-        scenario_dir = os.path.join(RESULTS_DIR, name)
-        os.makedirs(scenario_dir, exist_ok=True)
-
-        generate_scenario_detail_plot(
-            r_aqps, r_llf, os.path.join(scenario_dir, "scenario_detail.png")
-        )
-
-    # Print summary
-    logger.info("\n" + "=" * 80)
-    logger.info("SIMULATION SUMMARY")
-    logger.info("=" * 80)
-
-    scenarios = ["S1", "S2", "S3", "S4", "S5", "S6"]
-    for scenario, (r_aqps, r_llf) in zip(scenarios, results):
-        logger.info(f"\n{scenario} - {r_aqps.scenario_name}")
-        logger.info(
-            f"  AQPS: Priority {r_aqps.priority_fulfillment_rate:.1f}%, "
-            f"Non-Priority {r_aqps.non_priority_energy_delivered_pct:.1f}%, "
-            f"Time {r_aqps.avg_schedule_time_ms:.2f}ms"
-        )
-        logger.info(
-            f"  LLF:  Priority {r_llf.priority_fulfillment_rate:.1f}%, "
-            f"Non-Priority {r_llf.non_priority_energy_delivered_pct:.1f}%, "
-            f"Time {r_llf.avg_schedule_time_ms:.2f}ms"
-        )
-        logger.info(
-            f"  AQPS Events: Preemptions={r_aqps.total_preemptions}, "
-            f"Violations={r_aqps.total_threshold_violations}, "
-            f"Deferrals={r_aqps.total_deferrals}"
-        )
-
-    logger.info("\n" + "=" * 80)
-    logger.info("All results saved to: " + RESULTS_DIR)
-    logger.info("=" * 80)
+    for sc_key, sc_label in scenarios:
+        if sc_key in data["scenarios"]:
+            ev_data = data["scenarios"][sc_key]
+            res = run_scenario(fleet_size, sc_key, sc_label, ev_data, env_data)
+            results.append(res)
 
     return results
 
 
+# =============================================================================
+# Plotting and Export Functions
+# =============================================================================
+def export_data_to_csv(results_45, results_90):
+    all_results = results_45 + results_90
+    if not all_results:
+        return
+
+    # Fulfillment
+    with open(
+        os.path.join(RESULTS_DIR, "fulfillment_data.csv"), mode="w", newline=""
+    ) as f:
+        writer = csv.writer(f)
+        writer.writerow(
+            [
+                "Fleet Size",
+                "Scenario Label",
+                "Priority Pct",
+                "Algorithm",
+                "Priority Fulfillment",
+                "Non-Priority Fulfillment",
+            ]
+        )
+        for r in all_results:
+            writer.writerow(
+                [
+                    r["fleet_size"],
+                    r["scenario_label"],
+                    r["priority_ratio"],
+                    "AQPS",
+                    r["aqps"]["priority_fulfillment"],
+                    r["aqps"]["non_priority_fulfillment"],
+                ]
+            )
+            writer.writerow(
+                [
+                    r["fleet_size"],
+                    r["scenario_label"],
+                    r["priority_ratio"],
+                    "LLF",
+                    r["llf"]["priority_fulfillment"],
+                    r["llf"]["non_priority_fulfillment"],
+                ]
+            )
+
+    # Cumulative Cost
+    with open(
+        os.path.join(RESULTS_DIR, "cumulative_cost_data.csv"), mode="w", newline=""
+    ) as f:
+        writer = csv.writer(f)
+        writer.writerow(
+            [
+                "Fleet Size",
+                "Scenario Label",
+                "Time Step",
+                "Hour",
+                "AQPS Cost",
+                "LLF Cost",
+            ]
+        )
+        for r in all_results:
+            for t, aqps_c, llf_c in zip(
+                r["time_steps"],
+                r["aqps"]["cumulative_cost"],
+                r["llf"]["cumulative_cost"],
+            ):
+                writer.writerow(
+                    [r["fleet_size"], r["scenario_label"], t, t * 0.25, aqps_c, llf_c]
+                )
+
+
+def plot_fulfillment_stacked(results_45, results_90):
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+    width = 0.35
+
+    def plot_stacked_axis(ax, results, title):
+        labels = [r["scenario_label"] for r in results]
+        x = np.arange(len(labels))
+
+        # Calculate Weighted Percentages for accurate stacking
+        aqps_p_weighted, aqps_np_weighted = [], []
+        llf_p_weighted, llf_np_weighted = [], []
+
+        for r in results:
+            p_ratio = r["priority_ratio"] / 100.0
+            np_ratio = 1.0 - p_ratio
+
+            # AQPS Bars
+            aqps_p_weighted.append(r["aqps"]["priority_fulfillment"] * p_ratio)
+            aqps_np_weighted.append(r["aqps"]["non_priority_fulfillment"] * np_ratio)
+
+            # LLF Bars
+            llf_p_weighted.append(r["llf"]["priority_fulfillment"] * p_ratio)
+            llf_np_weighted.append(r["llf"]["non_priority_fulfillment"] * np_ratio)
+
+        # Plot AQPS (Left Bar in group)
+        ax.bar(
+            x - width / 2,
+            aqps_np_weighted,
+            width,
+            label="AQPS: Non-Priority Met",
+            color="#D32F2F",
+            alpha=0.9,
+        )
+        ax.bar(
+            x - width / 2,
+            aqps_p_weighted,
+            width,
+            bottom=aqps_np_weighted,
+            label="AQPS: Priority Met",
+            color="#2E7D32",
+            alpha=0.9,
+        )
+
+        # Plot LLF (Right Bar in group)
+        ax.bar(
+            x + width / 2,
+            llf_np_weighted,
+            width,
+            label="LLF: Non-Priority Met",
+            color="#E57373",
+            alpha=0.9,
+        )
+        ax.bar(
+            x + width / 2,
+            llf_p_weighted,
+            width,
+            bottom=llf_np_weighted,
+            label="LLF: Priority Met",
+            color="#81C784",
+            alpha=0.9,
+        )
+
+        ax.set_xticks(x)
+        ax.set_xticklabels(labels, fontsize=11)
+        ax.set_ylabel(
+            "Total Fleet Demand Fulfilled (%)", fontsize=12, fontweight="bold"
+        )
+        ax.set_title(title, fontsize=13, fontweight="bold")
+        ax.grid(True, alpha=0.3, axis="y")
+        ax.set_ylim([0, 110])
+        # Add a baseline for 100% total demand
+        ax.axhline(y=100, color="black", linestyle="--", alpha=0.5)
+
+    plot_stacked_axis(ax1, results_45, "45 EVs Fleet (15 EVSEs)")
+    plot_stacked_axis(ax2, results_90, "90 EVs Fleet (30 EVSEs)")
+
+    # Deduplicate legend
+    handles, labels = ax1.get_legend_handles_labels()
+    fig.legend(
+        handles,
+        labels,
+        loc="lower center",
+        ncol=4,
+        fontsize=11,
+        bbox_to_anchor=(0.5, -0.05),
+    )
+
+    fig.suptitle(
+        "Total EV Fulfillment Breakdown: AQPS vs LLF",
+        fontsize=16,
+        fontweight="bold",
+        y=1.05,
+    )
+    plt.tight_layout()
+    plt.savefig(
+        os.path.join(RESULTS_DIR, "fig_fulfillment_stacked.png"),
+        dpi=300,
+        bbox_inches="tight",
+    )
+    plt.close()
+
+
+# def plot_priority_fulfillment(results_45, results_90):
+#     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+
+#     width = 0.35
+
+#     # --- Subplot 1: 45 EVs ---
+#     labels_45 = [r["scenario_label"] for r in results_45]
+#     aqps_45 = [r["aqps"]["priority_fulfillment"] for r in results_45]
+#     llf_45 = [r["llf"]["priority_fulfillment"] for r in results_45]
+#     x_45 = np.arange(len(labels_45))
+
+#     ax1.bar(x_45 - width / 2, aqps_45, width, label="AQPS", color="#2E7D32", alpha=0.9)
+#     ax1.bar(x_45 + width / 2, llf_45, width, label="LLF", color="#81C784", alpha=0.9)
+#     ax1.set_xticks(x_45)
+#     ax1.set_xticklabels(labels_45, fontsize=11)
+#     ax1.set_ylabel("Priority Demand Met (%)", fontsize=12, fontweight="bold")
+#     ax1.set_title("45 EVs Fleet (15 EVSEs)", fontsize=13, fontweight="bold")
+#     ax1.grid(True, alpha=0.3, axis="y")
+#     ax1.legend(fontsize=11)
+#     ax1.set_ylim([0, 110])
+
+#     # --- Subplot 2: 90 EVs ---
+#     labels_90 = [r["scenario_label"] for r in results_90]
+#     aqps_90 = [r["aqps"]["priority_fulfillment"] for r in results_90]
+#     llf_90 = [r["llf"]["priority_fulfillment"] for r in results_90]
+#     x_90 = np.arange(len(labels_90))
+
+#     ax2.bar(x_90 - width / 2, aqps_90, width, label="AQPS", color="#1565C0", alpha=0.9)
+#     ax2.bar(x_90 + width / 2, llf_90, width, label="LLF", color="#64B5F6", alpha=0.9)
+#     ax2.set_xticks(x_90)
+#     ax2.set_xticklabels(labels_90, fontsize=11)
+#     ax2.set_ylabel("Priority Demand Met (%)", fontsize=12, fontweight="bold")
+#     ax2.set_title("90 EVs Fleet (30 EVSEs)", fontsize=13, fontweight="bold")
+#     ax2.grid(True, alpha=0.3, axis="y")
+#     ax2.legend(fontsize=11)
+#     ax2.set_ylim([0, 110])
+
+#     fig.suptitle(
+#         "Priority EV Fulfillment vs. Scenarios (AQPS vs LLF)",
+#         fontsize=16,
+#         fontweight="bold",
+#     )
+#     plt.tight_layout()
+#     plt.savefig(os.path.join(RESULTS_DIR, "fig1_priority_fulfillment.png"), dpi=300)
+#     plt.close()
+
+
+# def plot_non_priority_fulfillment(results_45, results_90):
+#     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+
+#     width = 0.35
+
+#     # --- Subplot 1: 45 EVs ---
+#     labels_45 = [
+#         f"{r['scenario_key'].split('_')[0]}\n({100 - r['priority_ratio']:.0f}% Non-Priority)"
+#         for r in results_45
+#     ]
+#     aqps_45 = [r["aqps"]["non_priority_fulfillment"] for r in results_45]
+#     llf_45 = [r["llf"]["non_priority_fulfillment"] for r in results_45]
+#     x_45 = np.arange(len(labels_45))
+
+#     ax1.bar(x_45 - width / 2, aqps_45, width, label="AQPS", color="#D32F2F", alpha=0.9)
+#     ax1.bar(x_45 + width / 2, llf_45, width, label="LLF", color="#E57373", alpha=0.9)
+#     ax1.set_xticks(x_45)
+#     ax1.set_xticklabels(labels_45, fontsize=11)
+#     ax1.set_ylabel("Non-Priority Demand Met (%)", fontsize=12, fontweight="bold")
+#     ax1.set_title("45 EVs Fleet (15 EVSEs)", fontsize=13, fontweight="bold")
+#     ax1.grid(True, alpha=0.3, axis="y")
+#     ax1.legend(fontsize=11)
+#     ax1.set_ylim([0, 110])
+
+#     # --- Subplot 2: 90 EVs ---
+#     labels_90 = [
+#         f"{r['scenario_key'].split('_')[0]}\n({100 - r['priority_ratio']:.0f}% Non-Priority)"
+#         for r in results_90
+#     ]
+#     aqps_90 = [r["aqps"]["non_priority_fulfillment"] for r in results_90]
+#     llf_90 = [r["llf"]["non_priority_fulfillment"] for r in results_90]
+#     x_90 = np.arange(len(labels_90))
+
+#     ax2.bar(x_90 - width / 2, aqps_90, width, label="AQPS", color="#F57C00", alpha=0.9)
+#     ax2.bar(x_90 + width / 2, llf_90, width, label="LLF", color="#FFB74D", alpha=0.9)
+#     ax2.set_xticks(x_90)
+#     ax2.set_xticklabels(labels_90, fontsize=11)
+#     ax2.set_ylabel("Non-Priority Demand Met (%)", fontsize=12, fontweight="bold")
+#     ax2.set_title("90 EVs Fleet (30 EVSEs)", fontsize=13, fontweight="bold")
+#     ax2.grid(True, alpha=0.3, axis="y")
+#     ax2.legend(fontsize=11)
+#     ax2.set_ylim([0, 110])
+
+#     fig.suptitle(
+#         "Non-Priority EV Fulfillment vs. Scenarios (AQPS vs LLF)",
+#         fontsize=16,
+#         fontweight="bold",
+#     )
+#     plt.tight_layout()
+#     plt.savefig(os.path.join(RESULTS_DIR, "fig2_non_priority_fulfillment.png"), dpi=300)
+#     plt.close()
+
+
+def plot_cumulative_cost(results, fleet_size):
+    plt.figure(figsize=(10, 6))
+    colors = ["#4CAF50", "#2196F3", "#F44336"]
+
+    for idx, r in enumerate(results):
+        hours = [t * 0.25 for t in r["time_steps"]]
+        c = colors[idx % len(colors)]
+        plt.plot(
+            hours,
+            r["aqps"]["cumulative_cost"],
+            linestyle="-",
+            linewidth=2,
+            color=c,
+            label=f'AQPS: {r["scenario_label"]}',
+        )
+        plt.plot(
+            hours,
+            r["llf"]["cumulative_cost"],
+            linestyle="--",
+            linewidth=2,
+            color=c,
+            label=f'LLF: {r["scenario_label"]}',
+        )
+
+    plt.xlabel("Time of Day (Hours)", fontsize=12, fontweight="bold")
+    plt.ylabel("Cumulative Energy Cost ($)", fontsize=12, fontweight="bold")
+    plt.title(
+        f"Total Charging Cost Over the Day ({fleet_size} EVs)",
+        fontsize=14,
+        fontweight="bold",
+    )
+    plt.grid(True, alpha=0.3)
+    plt.legend(fontsize=10, ncol=2)
+
+    plt.tight_layout()
+    plt.savefig(
+        os.path.join(RESULTS_DIR, f"fig3_cumulative_cost_{fleet_size}EVs.png"), dpi=300
+    )
+    plt.close()
+
+
+def plot_preemption_vs_arrival(result):
+    plt.figure(figsize=(12, 6))
+
+    # Convert indices to hours
+    aqps_preempts = sorted([t * 0.25 for t in result["aqps"]["preemptions"]])
+    llf_starves = sorted([t * 0.25 for t in result["llf"]["starvations"]])
+    priority_arrivals = sorted([t * 0.25 for t in result["priority_arrivals"]])
+
+    # Create time array and cumulative counts
+    time_axis = np.arange(0, 24.25, 0.25)
+
+    cum_preempts = [sum(1 for p in aqps_preempts if p <= t) for t in time_axis]
+    cum_starves = [sum(1 for s in llf_starves if s <= t) for t in time_axis]
+
+    # Plot Cumulative Events as Step charts (Standard in Control systems)
+    plt.step(
+        time_axis,
+        cum_preempts,
+        where="post",
+        color="#2E7D32",
+        linewidth=3,
+        label="Cumulative AQPS Preemptions (Layer 1 Action)",
+    )
+    plt.step(
+        time_axis,
+        cum_starves,
+        where="post",
+        color="#D32F2F",
+        linewidth=3,
+        linestyle="--",
+        label="Cumulative LLF Priority Starvations (Failures)",
+    )
+
+    # Use secondary axis to show the "Stress Driver" (Priority Arrivals)
+    ax2 = plt.twinx()
+    ax2.hist(
+        priority_arrivals,
+        bins=24,
+        range=(0, 24),
+        alpha=0.2,
+        color="#1565C0",
+        label="Priority EV Arrival Volume",
+    )
+    ax2.set_ylabel(
+        "Number of Priority Arrivals", color="#1565C0", fontsize=12, fontweight="bold"
+    )
+
+    # Formatting
+    plt.xlim([0, 24])
+    plt.xlabel("Time of Day (Hours)", fontsize=12, fontweight="bold")
+
+    # Primary Y axis formatting
+    ax = plt.gca()  # gets the twinx axis, need the primary
+    fig = plt.gcf()
+    ax1 = fig.axes[0]
+    ax1.set_ylabel("Cumulative Event Occurrences", fontsize=12, fontweight="bold")
+    ax1.grid(True, alpha=0.3)
+
+    plt.title(
+        f'Mechanism Validation: AQPS Preemption preventing Priority Starvation\n({result["scenario_label"]}, {result["fleet_size"]} EVs)',
+        fontsize=14,
+        fontweight="bold",
+    )
+
+    # Combine legends
+    lines_1, labels_1 = ax1.get_legend_handles_labels()
+    lines_2, labels_2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc="upper left", fontsize=11)
+
+    plt.tight_layout()
+    plt.savefig(
+        os.path.join(
+            RESULTS_DIR,
+            f'fig4_mechanism_validation_{result["scenario_key"]}_{result["fleet_size"]}EVs.png',
+        ),
+        dpi=300,
+    )
+    plt.close()
+
+
+def main():
+    print("Starting AQPC Scenario Simulations with AQPS vs LLF Comparison...")
+
+    results_45 = execute_configuration(fleet_size=45)
+    results_90 = execute_configuration(fleet_size=90)
+
+    if not results_45 or not results_90:
+        print("Missing required JSON data files. Simulation halted.")
+        return
+
+    print("Exporting data to CSV files...")
+    export_data_to_csv(results_45, results_90)
+
+    print("Generating Figures...")
+    plot_fulfillment_stacked(results_45, results_90)
+    # plot_priority_fulfillment(results_45, results_90)
+    # plot_non_priority_fulfillment(results_45, results_90)
+
+    plot_cumulative_cost(results_45, 45)
+    plot_cumulative_cost(results_90, 90)
+
+    # Extract S6 (Peak Stress) from 90 EVs configuration for the preemption plot to show maximum stress
+    peak_stress_90 = next(
+        (r for r in results_90 if r["scenario_key"] == "S6_PeakStress"), None
+    )
+    if peak_stress_90:
+        plot_preemption_vs_arrival(peak_stress_90)
+
+    print(f"All figures and data CSVs saved to directory: {RESULTS_DIR}/")
+
+
 if __name__ == "__main__":
-    results = main()
+    main()
