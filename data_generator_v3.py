@@ -1,126 +1,56 @@
 # pylint: disable=missing-module-docstring,missing-class-docstring,missing-function-docstring
-"""
-Data generator for AQPS vs LLF simulation studies.
-
-Generates adversarial bottleneck scenarios to expose LLF's structural
-blind spot: inability to account for operator-defined priority flags.
-
-Scenarios:
-  S1_Baseline     - Mild conditions, both schedulers cope (27% priority)
-  S3_HighPriority - LLF Trap: early NP decoys with huge energy + tight
-                    deadlines hog chargers; priority EVs arrive mid-day
-                    and starve under LLF (50% priority)
-  S6_PeakStress   - Extreme NP blockers clustered before PM peak block
-                    chargers when priority EVs arrive during TOU peak
-                    (50% priority)
-
-Fleet configurations:
-  45 EVs  / 16 EVSE / 320A transformer / 220V
-  90 EVs  / 35 EVSE / 700A transformer / 220V
-
-TOU: Real Australian commercial weekday tariff (3-tier, c/kWh).
-"""
 
 import numpy as np
 import json
 from datetime import datetime, timedelta
 
 
-# =============================================================================
-# Australian Commercial TOU Tariff (Weekday)
-# =============================================================================
-# 48 half-hour intervals, c/kWh
-# Off-peak  = 17.81  (00:00-07:00, 22:00-24:00)
-# Shoulder  = 20.87  (07:00-15:00, 21:00-22:00)
-# Peak      = 31.21  (15:00-21:00)
-# =============================================================================
-_TOU_HALFHOUR_CKWH = [
-    17.81,
-    17.81,
-    17.81,
-    17.81,
-    17.81,
-    17.81,
-    17.81,
-    17.81,  # 00:00-04:00
-    17.81,
-    17.81,
-    17.81,
-    17.81,
-    17.81,
-    17.81,  # 04:00-07:00
-    20.87,
-    20.87,
-    20.87,
-    20.87,
-    20.87,
-    20.87,
-    20.87,
-    20.87,  # 07:00-11:00
-    20.87,
-    20.87,
-    20.87,
-    20.87,
-    20.87,
-    20.87,
-    20.87,
-    20.87,  # 11:00-15:00
-    31.21,
-    31.21,
-    31.21,
-    31.21,
-    31.21,
-    31.21,
-    31.21,
-    31.21,  # 15:00-19:00
-    31.21,
-    31.21,
-    31.21,
-    31.21,  # 19:00-21:00
-    20.87,
-    20.87,  # 21:00-22:00
-    17.81,
-    17.81,
-    17.81,
-    17.81,  # 22:00-24:00
-]
-assert len(_TOU_HALFHOUR_CKWH) == 48
-
-
-# =============================================================================
-# Vehicle Archetypes
-# =============================================================================
-ARCHETYPES = {
-    "Light": {"cap": 40, "p_max": 11, "eff": 0.95},
-    "Medium": {"cap": 75, "p_max": 22, "eff": 0.92},
-}
-
-# =============================================================================
-# Infrastructure Configs
-# =============================================================================
-INFRA = {
-    45: {"n_evse": 16, "transformer_A": 320, "voltage": 220},
-    90: {"n_evse": 35, "transformer_A": 700, "voltage": 220},
-}
-
-
 def generate_scenarios(output_file="simulation_data_v2.json"):
-    """Generate adversarial bottleneck scenarios for both fleet sizes."""
+    """
+    Generates adversarial bottleneck scenarios to expose LLF blind spots.
 
-    # ── 1. Time Configuration ────────────────────────────────────────
+    Scenarios:
+        S1 - Baseline: Mild conditions, both AQPS and LLF cope.
+        S3 - LLF Trap: Early non-priority "decoys" with huge energy + tight
+             deadlines hog chargers. Priority EVs arrive mid-day and starve
+             under LLF. AQPS preempts via Layer 1.
+        S6 - Peak Stress: Extreme non-priority EVs clustered just before PM
+             peak block chargers when priority EVs arrive during TOU peak.
+
+    Each scenario generated for both fleet sizes:
+        - 45 EVs / 16 EVSEs / 320A transformer
+        - 90 EVs / 35 EVSEs / 700A transformer
+    """
+
+    # ── 1. Time Configuration ────────────────────────────────────────────
     # 96 steps × 15 min = 24 h, starting 06:00
     start_time = datetime.strptime("2026-02-12 06:00", "%Y-%m-%d %H:%M")
     time_steps = [start_time + timedelta(minutes=15 * i) for i in range(96)]
 
+    # Helper: hour → step index (relative to 06:00 start)
     def hour_to_idx(h):
-        """Hour of day → step index (relative to 06:00 start)."""
-        return int((h - 6) * 4)
+        return int((h - 6) * 4)  # 4 steps per hour
 
-    # ── 2. Environmental Forecasts ───────────────────────────────────
+    # ── 2. Archetypes ────────────────────────────────────────────────────
+    archetypes = {
+        "Light": {"cap": 40, "p_max": 11, "eff": 0.95},
+        "Medium": {"cap": 75, "p_max": 22, "eff": 0.92},
+    }
+
+    # ── 3. Infrastructure Configs ────────────────────────────────────────
+    infra = {
+        45: {"n_evse": 16, "transformer_A": 320, "voltage": 220},
+        90: {"n_evse": 35, "transformer_A": 700, "voltage": 220},
+    }
+
+    # ── 4. Environmental Forecasts ───────────────────────────────────────
     def get_tou(dt):
-        """Real Australian commercial weekday tariff, $/kWh."""
-        halfhour_idx = (dt.hour * 60 + dt.minute) // 30
-        return _TOU_HALFHOUR_CKWH[halfhour_idx] / 100.0  # c/kWh → $/kWh
+        h = dt.hour
+        if 15 <= h < 21:
+            return 0.35  # Peak
+        if 7 <= h < 15 or 21 <= h < 22:
+            return 0.22  # Shoulder
+        return 0.15  # Off-Peak
 
     tou_profile = [get_tou(t) for t in time_steps]
 
@@ -134,13 +64,14 @@ def generate_scenarios(output_file="simulation_data_v2.json"):
 
     base_load = [10.0 + (15.0 if 8 <= t.hour < 18 else 0.0) for t in time_steps]
 
-    # ── 3. EV Generation Helpers ─────────────────────────────────────
+    # ── 5. EV Generation Helpers ─────────────────────────────────────────
     ev_counter = 0
 
     def make_ev(archetype, arr_idx, dep_idx, energy_frac, is_priority):
         """Create a single EV dict."""
         nonlocal ev_counter
-        arc = ARCHETYPES[archetype]
+        arc = archetypes[archetype]
+        # Convert step index to ISO datetime string (06:00 start, 15 min steps)
         arr_clipped = int(np.clip(arr_idx, 0, 95))
         dep_clipped = int(np.clip(dep_idx, 0, 95))
         arr_dt = start_time + timedelta(minutes=15 * arr_clipped)
@@ -183,11 +114,13 @@ def generate_scenarios(output_file="simulation_data_v2.json"):
             ev["avail_steps"] = avail_steps
         return ev_list
 
-    # ── 4. Scenario Generators ───────────────────────────────────────
+    # ── 6. Scenario Generators ───────────────────────────────────────────
 
     def gen_s1(n_evs, seed=100):
-        """S1 - Baseline: Mild, uniform arrivals, moderate energy, relaxed
-        deadlines. Both AQPS and LLF should handle this well. 27% priority."""
+        """S1 - Baseline: Mild, uniform arrivals, moderate energy, relaxed deadlines.
+        Both AQPS and LLF should handle this well.
+        27% priority.
+        """
         nonlocal ev_counter
         ev_counter = 0
         rng = np.random.default_rng(seed)
@@ -199,17 +132,17 @@ def generate_scenarios(output_file="simulation_data_v2.json"):
         # Non-priority: uniform 06:00-16:00, moderate energy, long dwell
         evs += make_batch(
             n=n_nonpri,
-            archetype="Light",
+            archetype="Light" if rng.random() > 0.5 else "Medium",
             arr_range=(hour_to_idx(6), hour_to_idx(16)),
             dwell_range=(20, 44),  # 5-11 hours
             energy_range=(0.25, 0.55),  # moderate
             is_priority=False,
             rng=rng,
         )
-        # Alternate archetypes + re-roll energy per archetype
+        # Fix: alternate archetypes properly
         for i, ev in enumerate(evs):
             arc_name = "Light" if i % 2 == 0 else "Medium"
-            arc = ARCHETYPES[arc_name]
+            arc = archetypes[arc_name]
             ev["archetype"] = arc_name
             ev["p_max"] = arc["p_max"]
             ev["battery_cap_kwh"] = arc["cap"]
@@ -225,9 +158,10 @@ def generate_scenarios(output_file="simulation_data_v2.json"):
             is_priority=True,
             rng=rng,
         )
+        # Alternate archetypes for priority too
         for i, ev in enumerate(pri_evs):
             arc_name = "Light" if i % 2 == 0 else "Medium"
-            arc = ARCHETYPES[arc_name]
+            arc = archetypes[arc_name]
             ev["archetype"] = arc_name
             ev["p_max"] = arc["p_max"]
             ev["battery_cap_kwh"] = arc["cap"]
@@ -240,18 +174,16 @@ def generate_scenarios(output_file="simulation_data_v2.json"):
         """S3 - LLF Trap: 50% priority.
 
         Non-priority DECOYS:
-          - Arrive 07:00-10:00 (shifted later so they are STILL actively
-            charging when priority EVs arrive at 10:00-13:00)
-          - Huge energy need (75-95% of Medium battery = 56-71 kWh)
-          - TIGHT deadlines (4-6 hours dwell -> near-zero laxity)
-          - 80% of NP pool are decoys to saturate chargers
-          - LLF sees low laxity -> locks onto them
+          - Arrive early (06:00-08:00)
+          - Huge energy need (70-90% of Medium battery = 52-67 kWh)
+          - TIGHT deadlines (4-6 hours dwell → near-zero laxity)
+          - LLF sees low laxity → locks onto them
 
         Priority EVs:
-          - Arrive mid-day (10:00-13:00, tighter window for max overlap)
+          - Arrive mid-day (10:00-14:00)
           - Moderate energy (40-60% of cap)
           - Moderate dwell (5-8 hours)
-          - LLF refuses to cut off low-laxity decoys -> priority starves
+          - LLF refuses to cut off low-laxity decoys → priority starves
           - AQPS preempts decoys via Layer 1
         """
         nonlocal ev_counter
@@ -263,18 +195,17 @@ def generate_scenarios(output_file="simulation_data_v2.json"):
 
         evs = []
 
-        # ── Non-Priority DECOYS: hungry, tight, overlap with priority ─
-        n_decoys = int(n_nonpri * 0.80)  # 80% of NP are decoys
-        n_normal_np = n_nonpri - n_decoys
+        # ── Non-Priority DECOYS: early, hungry, tight deadline ───────
+        n_decoys = int(n_nonpri * 0.70)  # 70% of non-pri are decoys
+        n_normal_np = n_nonpri - n_decoys  # 30% normal non-priority
 
-        # Decoys: Medium archetype, arrive 07:00-10:00 so they're still
-        # active at 10:00-13:00 when priority EVs show up
+        # Decoys: Medium archetype, early arrival, high energy, short dwell
         evs += make_batch(
             n=n_decoys,
             archetype="Medium",
-            arr_range=(hour_to_idx(7), hour_to_idx(10)),  # 07:00-10:00
+            arr_range=(hour_to_idx(6), hour_to_idx(8)),  # 06:00-08:00
             dwell_range=(16, 24),  # 4-6 hours (tight!)
-            energy_range=(0.75, 0.95),  # 56-71 kWh
+            energy_range=(0.70, 0.90),  # 52-67 kWh
             is_priority=False,
             rng=rng,
         )
@@ -290,11 +221,11 @@ def generate_scenarios(output_file="simulation_data_v2.json"):
             rng=rng,
         )
 
-        # ── Priority EVs: tighter mid-day window for max overlap ─────
+        # ── Priority EVs: mid-day arrival, moderate needs ────────────
         evs += make_batch(
             n=n_pri,
             archetype="Medium",
-            arr_range=(hour_to_idx(10), hour_to_idx(13)),  # 10:00-13:00
+            arr_range=(hour_to_idx(10), hour_to_idx(14)),  # 10:00-14:00
             dwell_range=(20, 32),  # 5-8 hours
             energy_range=(0.40, 0.60),  # 30-45 kWh
             is_priority=True,
@@ -309,7 +240,7 @@ def generate_scenarios(output_file="simulation_data_v2.json"):
         Non-priority BLOCKERS:
           - Cluster just BEFORE PM peak (13:00-15:00)
           - Extreme energy (75-90% of Medium = 56-67 kWh)
-          - Tight deadlines (4-6 hours -> depart 17:00-21:00)
+          - Tight deadlines (4-6 hours → depart 17:00-21:00)
           - Perfectly timed to hog chargers during TOU peak
 
         Priority EVs:
@@ -317,7 +248,7 @@ def generate_scenarios(output_file="simulation_data_v2.json"):
           - Moderate-high energy (50-70% of cap)
           - Moderate dwell (4-7 hours)
           - Must charge during peak pricing window
-          - LLF blocked by low-laxity non-priority -> priority starves
+          - LLF blocked by low-laxity non-priority → priority starves
         """
         nonlocal ev_counter
         ev_counter = 0
@@ -329,7 +260,7 @@ def generate_scenarios(output_file="simulation_data_v2.json"):
         evs = []
 
         # ── Non-Priority BLOCKERS: pre-peak cluster ──────────────────
-        n_blockers = int(n_nonpri * 0.75)
+        n_blockers = int(n_nonpri * 0.75)  # 75% are blockers
         n_normal_np = n_nonpri - n_blockers
 
         # Blockers: arrive 13:00-15:00, extreme energy, tight
@@ -367,7 +298,7 @@ def generate_scenarios(output_file="simulation_data_v2.json"):
 
         return finalize(evs)
 
-    # ── 5. Generate All Variants ─────────────────────────────────────
+    # ── 7. Generate All Variants ─────────────────────────────────────────
     generators = {
         "S1_Baseline": gen_s1,
         "S3_HighPriority": gen_s3,
@@ -375,15 +306,21 @@ def generate_scenarios(output_file="simulation_data_v2.json"):
     }
 
     fleet_sizes = [45, 90]
+
     scenarios = {}
     infra_configs = {}
 
     for size in fleet_sizes:
         for sname, gen_fn in generators.items():
-            scenarios.setdefault(size, {})[sname] = gen_fn(
+            key = (
+                f"{sname}"  # same key for both fleet sizes (split into separate files)
+            )
+            scenarios.setdefault(size, {})[key] = gen_fn(
                 n_evs=size, seed=hash((sname, size)) % 10000
             )
-            cfg = INFRA[size]
+
+            # Infrastructure for this variant
+            cfg = infra[size]
             infra_configs[size] = {
                 "n_evse": cfg["n_evse"],
                 "transformer_capacity_A": cfg["transformer_A"],
@@ -394,7 +331,7 @@ def generate_scenarios(output_file="simulation_data_v2.json"):
                 "max_rate_per_evse_A": 32,
             }
 
-    # ── 6. Summary Statistics ────────────────────────────────────────
+    # ── 8. Summary Statistics ────────────────────────────────────────────
     def compute_summary(evs):
         pri = [e for e in evs if e["priority"] == "High"]
         npri = [e for e in evs if e["priority"] == "Low"]
@@ -417,7 +354,7 @@ def generate_scenarios(output_file="simulation_data_v2.json"):
             ),
         }
 
-    # ── 7. Output ────────────────────────────────────────────────────
+    # ── 9. Output: one JSON per fleet size ───────────────────────────────
     environment = {
         "tou_tariff": tou_profile,
         "pv_forecast": pv_profile,
@@ -429,11 +366,7 @@ def generate_scenarios(output_file="simulation_data_v2.json"):
         "step_minutes": 15,
         "horizon": 96,
         "start_time": "2026-02-12 06:00",
-        "description": (
-            "Adversarial bottleneck scenarios for AQPS vs LLF comparison. "
-            "TOU: Australian commercial weekday tariff (off-peak 17.81, "
-            "shoulder 20.87, peak 31.21 c/kWh)."
-        ),
+        "description": "Adversarial bottleneck scenarios for AQPS vs LLF comparison",
         "fleet_sizes": fleet_sizes,
         "scenario_types": ["S1_Baseline", "S3_HighPriority", "S6_PeakStress"],
     }
@@ -441,7 +374,7 @@ def generate_scenarios(output_file="simulation_data_v2.json"):
     all_summaries = {}
 
     for size in fleet_sizes:
-        sc = scenarios[size]
+        sc = scenarios[size]  # dict: {S1_Baseline: [...], S3_HighPriority: [...], ...}
         summ = {k: compute_summary(v) for k, v in sc.items()}
         all_summaries[size] = summ
 

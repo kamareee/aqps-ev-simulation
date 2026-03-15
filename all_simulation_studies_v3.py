@@ -517,9 +517,9 @@ def plot_cumulative_cost(results, fleet_size):
 # =============================================================================
 # FIGURE 3: Preemption Gantt Chart (per scenario/fleet)
 # =============================================================================
-def _draw_gantt_rows(
+def _draw_gantt_panel(
     ax,
-    rows,
+    involved_list,
     ev_info,
     timeline_dict,
     horizon,
@@ -527,17 +527,13 @@ def _draw_gantt_rows(
     t_max,
     event_markers,
     event_connections,
+    title,
 ):
-    """
-    Draw Gantt rows onto ax.
+    """Helper: draw one Gantt panel (used for both AQPS and LLF)."""
+    n_evs = len(involved_list)
+    bar_height = 0.6
 
-    rows: list of (y_index, eid) — caller controls y placement for interleaving.
-    event_connections: list of (id_a, id_b, t_ev) — draws dashed line between their y positions.
-    """
-    bar_height = 0.75
-    y_pos = {eid: yi for yi, eid in rows}
-
-    for yi, eid in rows:
+    for yi, eid in enumerate(involved_list):
         info = ev_info[eid]
         arr = info["arrival"]
         dep = info["departure"]
@@ -601,12 +597,14 @@ def _draw_gantt_rows(
                 markeredgewidth=0.3,
             )
 
-    # Connection lines between event pairs (within same scheduler block)
+    # Connection lines between event pairs
     for id_a, id_b, t_ev in event_connections:
-        if id_a in y_pos and id_b in y_pos:
+        if id_a in involved_list and id_b in involved_list:
+            yi_a = involved_list.index(id_a)
+            yi_b = involved_list.index(id_b)
             ax.plot(
                 [t_ev * 0.25, t_ev * 0.25],
-                [y_pos[id_a], y_pos[id_b]],
+                [yi_a, yi_b],
                 "--",
                 color=COLORS["gantt_preempted"],
                 linewidth=0.5,
@@ -614,10 +612,27 @@ def _draw_gantt_rows(
                 zorder=3,
             )
 
+    # Y-axis labels
+    y_labels = []
+    for eid in involved_list:
+        tag = "P" if ev_info[eid]["is_priority"] else "NP"
+        short_id = eid.replace("EV_", "")
+        y_labels.append(f"{short_id} [{tag}]")
+
+    ax.set_yticks(range(n_evs))
+    ax.set_yticklabels(y_labels, fontsize=5.5)
+    ax.set_xlim(t_min * 0.25, t_max * 0.25)
+    ax.set_ylim(-0.5, n_evs - 0.5)
+    ax.invert_yaxis()
+    ax.set_title(title, fontweight="bold", fontsize=7.5)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.xaxis.grid(True, alpha=0.15, linewidth=0.4)
+
 
 def plot_preemption_gantt(result):
-    """Single-panel interleaved Gantt: each EV gets two consecutive rows —
-    AQPS row then LLF row — for direct side-by-side comparison."""
+    """Two-row Gantt: AQPS (top, with preemption) vs LLF (bottom, with starvation).
+    Same EVs shown in both panels for direct comparison."""
 
     preemptions = result["preemption_events"]
     starvations = result["llf_starvation_events"]
@@ -645,12 +660,13 @@ def plot_preemption_gantt(result):
                 ordered_ids.append(pe["preempted_id"])
             if pe["priority_id"] not in ordered_ids:
                 ordered_ids.append(pe["priority_id"])
+
+    # Also include starved priority EVs from LLF
     for se in starvations:
         if se["starved_id"] not in ordered_ids:
             ordered_ids.append(se["starved_id"])
 
-    # Cap at 3 EVs for a compact, readable figure
-    involved_list = ordered_ids[:3]
+    involved_list = ordered_ids[:10]
     n_evs = len(involved_list)
     if n_evs == 0:
         return
@@ -662,6 +678,7 @@ def plot_preemption_gantt(result):
     t_max = min(horizon, max(all_departures) + 4)
 
     # --- Build event marker dicts ---
+    # AQPS: preemption markers on preempted NP EVs
     aqps_markers = defaultdict(list)
     aqps_connections = []
     for pe in preemptions:
@@ -669,59 +686,32 @@ def plot_preemption_gantt(result):
             aqps_markers[pe["preempted_id"]].append(pe["time"])
         aqps_connections.append((pe["preempted_id"], pe["priority_id"], pe["time"]))
 
+    # LLF: starvation markers on starved priority EVs
     llf_markers = defaultdict(list)
     for se in starvations:
         if se["starved_id"] in involved_list:
             llf_markers[se["starved_id"]].append(se["time"])
 
-    # --- Interleaved layout ---
-    # GROUP: spacing between the two rows of an EV pair + gap before next EV.
-    # Row i*GROUP = AQPS row, i*GROUP+1.0 = LLF row, gap of 0.5 before next EV.
-    GROUP = 2.6
-    aqps_rows = []
-    llf_rows = []
-    ytick_positions = []
-    ytick_labels = []
+    # --- Create 2-row figure ---
+    fig_height = max(3.0, 0.3 * n_evs * 2 + 1.5)
+    fig, (ax_aqps, ax_llf) = plt.subplots(2, 1, figsize=(3.5, fig_height), sharex=True)
 
-    for i, eid in enumerate(involved_list):
-        y_aqps = i * GROUP
-        y_llf = i * GROUP + 1.0
-        aqps_rows.append((y_aqps, eid))
-        llf_rows.append((y_llf, eid))
-
-        tag = "P" if ev_info[eid]["is_priority"] else "NP"
-        short_id = eid.replace("EV_", "")
-        ytick_positions += [y_aqps, y_llf]
-        ytick_labels += [f"{short_id} [{tag}]\nAQPS", f"{short_id} [{tag}]\nLLF"]
-
-    aqps_y_pos = {eid: y for y, eid in aqps_rows}
-    aqps_connections_mapped = [
-        (id_a, id_b, t_ev)
-        for id_a, id_b, t_ev in aqps_connections
-        if id_a in aqps_y_pos and id_b in aqps_y_pos
-    ]
-
-    total_span = (n_evs - 1) * GROUP + 2.0  # top of last LLF row + margin
-    # Fixed compact height: ~1.1 inches per EV pair + header/footer space
-    fig_height = n_evs * 1.1 + 1.2
-    fig_width = 7.0  # double-column journal width
-
-    fig, ax = plt.subplots(1, 1, figsize=(fig_width, fig_height))
-
-    _draw_gantt_rows(
-        ax,
-        aqps_rows,
+    _draw_gantt_panel(
+        ax_aqps,
+        involved_list,
         ev_info,
         aqps_timeline,
         horizon,
         t_min,
         t_max,
         aqps_markers,
-        aqps_connections_mapped,
+        aqps_connections,
+        f"AQPS (Preemption)",
     )
-    _draw_gantt_rows(
-        ax,
-        llf_rows,
+
+    _draw_gantt_panel(
+        ax_llf,
+        involved_list,
         ev_info,
         llf_timeline,
         horizon,
@@ -729,33 +719,19 @@ def plot_preemption_gantt(result):
         t_max,
         llf_markers,
         [],
+        f"LLF (Priority Starvation)",
     )
 
-    # Subtle separator between EV groups
-    for i in range(1, n_evs):
-        y_sep = i * GROUP - 0.35
-        ax.axhline(
-            y_sep, color="gray", linewidth=0.5, linestyle="--", alpha=0.35, zorder=0
-        )
-
-    ax.set_yticks(ytick_positions)
-    ax.set_yticklabels(ytick_labels, fontsize=7, linespacing=0.9)
-    ax.set_xlim(t_min * 0.25, t_max * 0.25)
-    ax.set_ylim(-0.6, total_span)
-    ax.invert_yaxis()
-    ax.set_xlabel("Time of Day (Hours)", fontsize=8)
-    ax.tick_params(axis="x", labelsize=7)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.xaxis.grid(True, alpha=0.2, linewidth=0.4)
+    ax_llf.set_xlabel("Time of Day (Hours)")
 
     fig.suptitle(
-        f"Scheduling Comparison \u2014 {result['scenario_label']}, {result['fleet_size']} EVs",
+        f"Scheduling Comparison — {result['scenario_label']}, {result['fleet_size']} EVs",
         fontweight="bold",
-        fontsize=9,
-        y=0.98,
+        fontsize=8.5,
+        y=1.02,
     )
 
+    # Shared legend below
     legend_elements = [
         mpatches.Patch(facecolor=COLORS["gantt_window"], label="Connected"),
         mpatches.Patch(facecolor=COLORS["gantt_p_charge"], label="Priority Charging"),
@@ -768,25 +744,25 @@ def plot_preemption_gantt(result):
             marker="v",
             color="w",
             markerfacecolor=COLORS["gantt_preempted"],
-            markersize=6,
+            markersize=5,
             label="Preemption / Starvation",
         ),
     ]
     fig.legend(
         handles=legend_elements,
-        fontsize=7,
+        fontsize=5.5,
         loc="lower center",
         ncol=4,
         frameon=False,
-        bbox_to_anchor=(0.5, 0.0),
+        bbox_to_anchor=(0.5, -0.03),
     )
 
-    plt.tight_layout(rect=[0, 0.07, 1, 0.96])
+    plt.tight_layout(rect=[0, 0.06, 1, 1.0])
     safe_label = result["scenario_key"]
     path = os.path.join(
         RESULTS_DIR, f"fig_preemption_gantt_{safe_label}_{result['fleet_size']}EVs.png"
     )
-    plt.savefig(path, dpi=300, bbox_inches="tight")
+    plt.savefig(path, dpi=300)
     plt.close()
     print(f"  Saved: {path}")
 
