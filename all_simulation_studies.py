@@ -318,8 +318,8 @@ def execute_configuration(fleet_size):
     env_data = data["environment"]
     scenarios = [
         ("S1_Baseline", "S1 (27%)"),
-        ("S3_HighPriority", "S3 (50%)"),
-        ("S6_PeakStress", "S6 (50% Peak)"),
+        ("S3_HighPriority", "S2 (50%)"),
+        ("S6_PeakStress", "S3 (50% Peak)"),
     ]
 
     results = []
@@ -534,7 +534,7 @@ def _draw_gantt_rows(
     rows: list of (y_index, eid) — caller controls y placement for interleaving.
     event_connections: list of (id_a, id_b, t_ev) — draws dashed line between their y positions.
     """
-    bar_height = 0.75
+    bar_height = 0.6
     y_pos = {eid: yi for yi, eid in rows}
 
     for yi, eid in rows:
@@ -677,7 +677,7 @@ def plot_preemption_gantt(result):
     # --- Interleaved layout ---
     # GROUP: spacing between the two rows of an EV pair + gap before next EV.
     # Row i*GROUP = AQPS row, i*GROUP+1.0 = LLF row, gap of 0.5 before next EV.
-    GROUP = 2.6
+    GROUP = 2.0
     aqps_rows = []
     llf_rows = []
     ytick_positions = []
@@ -685,7 +685,7 @@ def plot_preemption_gantt(result):
 
     for i, eid in enumerate(involved_list):
         y_aqps = i * GROUP
-        y_llf = i * GROUP + 1.0
+        y_llf = i * GROUP + 0.8
         aqps_rows.append((y_aqps, eid))
         llf_rows.append((y_llf, eid))
 
@@ -701,10 +701,10 @@ def plot_preemption_gantt(result):
         if id_a in aqps_y_pos and id_b in aqps_y_pos
     ]
 
-    total_span = (n_evs - 1) * GROUP + 2.0  # top of last LLF row + margin
-    # Fixed compact height: ~1.1 inches per EV pair + header/footer space
-    fig_height = n_evs * 1.1 + 1.2
-    fig_width = 7.0  # double-column journal width
+    total_span = (n_evs - 1) * GROUP + 1.6  # top of last LLF row + margin
+    # Single-column width avoids downscaling in two-column templates
+    fig_height = n_evs * 0.95 + 1.2
+    fig_width = 3.5  # single-column journal width
 
     fig, ax = plt.subplots(1, 1, figsize=(fig_width, fig_height))
 
@@ -739,7 +739,7 @@ def plot_preemption_gantt(result):
         )
 
     ax.set_yticks(ytick_positions)
-    ax.set_yticklabels(ytick_labels, fontsize=7, linespacing=0.9)
+    ax.set_yticklabels(ytick_labels, fontsize=7, linespacing=0.85)
     ax.set_xlim(t_min * 0.25, t_max * 0.25)
     ax.set_ylim(-0.6, total_span)
     ax.invert_yaxis()
@@ -776,13 +776,17 @@ def plot_preemption_gantt(result):
         handles=legend_elements,
         fontsize=7,
         loc="lower center",
-        ncol=4,
+        ncol=2,
         frameon=False,
         bbox_to_anchor=(0.5, 0.0),
     )
 
-    plt.tight_layout(rect=[0, 0.07, 1, 0.96])
+    plt.tight_layout(rect=[0, 0.12, 1, 0.96])
     safe_label = result["scenario_key"]
+    if safe_label.startswith("S3"):
+        safe_label = "S2"
+    elif safe_label.startswith("S6"):
+        safe_label = "S3"
     path = os.path.join(
         RESULTS_DIR, f"fig_preemption_gantt_{safe_label}_{result['fleet_size']}EVs.png"
     )
