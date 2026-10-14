@@ -1,0 +1,35 @@
+{
+  "case_1_breakdown": {
+    "time_idx": 24,
+    "type": "vehicle_breakdown",
+    "description": "Priority van EV_025 breaks down on route; standby NP van EV_005 promoted with urgent 32 kWh requirement and 15:30 deadline.",
+    "promote_id": "EV_005",
+    "new_req_kwh": 32.0,
+    "new_dep_idx": 38,
+    "new_w": 4.2,
+    "operator_choice": "recommended"
+  },
+  "case_2_driver_unavailable": {
+    "time_idx": 28,
+    "type": "driver_unavailable",
+    "description": "Driver absence delays EV_030 departure by +2h (laxity increases, triggering safe-release for incoming urgent EV_038).",
+    "delay_id": "EV_030",
+    "delay_steps": 8,
+    "operator_choice": "recommended"
+  },
+  "case_3_roster_swap": {
+    "time_idx": 22,
+    "type": "roster_swap",
+    "description": "FMS swaps afternoon delivery route between EV_028 (Priority) and EV_008 (Non-Priority); operator accepts business-continuity option.",
+    "swap_from_id": "EV_028",
+    "swap_to_id": "EV_008",
+    "operator_choice": "keep_all_urgent"
+  },
+  "case_4_pv_shortfall": {
+    "time_idx": 24,
+    "type": "pv_shortfall",
+    "description": "Sudden cloud front drops rooftop PV output from 17.8 kW forecast to 4.2 kW actual during midday window.",
+    "pv_drop_factor": 0.25,
+    "operator_choice": "recommended"
+  }
+}

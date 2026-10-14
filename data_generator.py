@@ -1,180 +1,138 @@
-# pylint: disable=missing-module-docstring,missing-class-docstring,missing-function-docstring
 """
-Data generator for AQPS vs LLF simulation studies.
+WP2 — Enriched Scenario & Roster Generator for AQPS Revision.
 
-Generates adversarial bottleneck scenarios to expose LLF's structural
-blind spot: inability to account for operator-defined priority flags.
+Integrates empirical commercial EV van parameters from:
+  - Vales-Alonso & Alcaraz (2026) "Emergent Charging Coordination in Electric Delivery Fleets"
+  - Fiori & Marzano (2018) "Modelling energy consumption of electric freight vehicles in urban
+    pickup/delivery operations" (e_i ~ U(0.22, 0.35) kWh/km)
 
-Scenarios:
-  S1_Baseline     - Mild conditions, both schedulers cope (27% priority)
-  S3_HighPriority - LLF Trap: early NP decoys with huge energy + tight
-                    deadlines hog chargers; priority EVs arrive mid-day
-                    and starve under LLF (50% priority)
-  S6_PeakStress   - Extreme NP blockers clustered before PM peak block
-                    chargers when priority EVs arrive during TOU peak
-                    (50% priority)
-
-Fleet configurations:
-  45 EVs  / 16 EVSE / 320A transformer / 220V
-  90 EVs  / 35 EVSE / 700A transformer / 220V
-
-TOU: Real Australian commercial weekday tariff (3-tier, c/kWh).
+Generates:
+  - simulation_data_45EVs.json  (16 EVSEs, 150 kW transformer limit)
+  - simulation_data_90EVs.json  (35 EVSEs, 300 kW transformer limit)
+  - simulation_data_180EVs.json (60 EVSEs, 600 kW transformer limit - for E5b scalability)
+  - data/operator_injections.json (Scripted case studies for E2)
 """
 
-import numpy as np
+import os
 import json
+import numpy as np
 from datetime import datetime, timedelta
+from scripts.prepare_aemo_pv import build_aemo_vic1_dataset
 
 
-# =============================================================================
-# Australian Commercial TOU Tariff (Weekday)
-# =============================================================================
-# 48 half-hour intervals, c/kWh
-# Off-peak  = 17.81  (00:00-07:00, 22:00-24:00)
-# Shoulder  = 20.87  (07:00-15:00, 21:00-22:00)
-# Peak      = 31.21  (15:00-21:00)
-# =============================================================================
 _TOU_HALFHOUR_CKWH = [
-    17.81,
-    17.81,
-    17.81,
-    17.81,
-    17.81,
-    17.81,
-    17.81,
-    17.81,  # 00:00-04:00
-    17.81,
-    17.81,
-    17.81,
-    17.81,
-    17.81,
-    17.81,  # 04:00-07:00
-    20.87,
-    20.87,
-    20.87,
-    20.87,
-    20.87,
-    20.87,
-    20.87,
-    20.87,  # 07:00-11:00
-    20.87,
-    20.87,
-    20.87,
-    20.87,
-    20.87,
-    20.87,
-    20.87,
-    20.87,  # 11:00-15:00
-    31.21,
-    31.21,
-    31.21,
-    31.21,
-    31.21,
-    31.21,
-    31.21,
-    31.21,  # 15:00-19:00
-    31.21,
-    31.21,
-    31.21,
-    31.21,  # 19:00-21:00
-    20.87,
-    20.87,  # 21:00-22:00
-    17.81,
-    17.81,
-    17.81,
-    17.81,  # 22:00-24:00
+    18.0, 18.0, 18.0, 18.0, 18.0, 18.0, 18.0, 18.0,  # 00:00-04:00 Off-Peak ($0.18/kWh)
+    18.0, 18.0, 18.0, 18.0, 18.0, 18.0,              # 04:00-07:00 Off-Peak
+    21.0, 21.0, 21.0, 21.0, 21.0, 21.0, 21.0, 21.0,  # 07:00-11:00 Shoulder ($0.21/kWh)
+    21.0, 21.0, 21.0, 21.0, 21.0, 21.0, 21.0, 21.0,  # 11:00-15:00 Shoulder
+    32.0, 32.0, 32.0, 32.0, 32.0, 32.0, 32.0, 32.0,  # 15:00-19:00 Peak ($0.32/kWh)
+    32.0, 32.0, 32.0, 32.0,                          # 19:00-21:00 Peak
+    21.0, 21.0,                                      # 21:00-22:00 Shoulder
+    18.0, 18.0, 18.0, 18.0,                          # 22:00-24:00 Off-Peak
 ]
-assert len(_TOU_HALFHOUR_CKWH) == 48
 
-
-# =============================================================================
-# Vehicle Archetypes
-# =============================================================================
+# Grounded in Renault Kangoo E-Tech (45 kWh), Ford E-Transit / Mercedes eVito (68 kWh), eSprinter (85 kWh)
 ARCHETYPES = {
-    "Light": {"cap": 40, "p_max": 11, "eff": 0.95},
-    "Medium": {"cap": 75, "p_max": 22, "eff": 0.92},
+    "Light":  {"model": "Renault Kangoo E-Tech", "cap": 45.0, "p_max": 11.0, "eff": 0.95, "cons_range": (0.20, 0.26)},
+    "Medium": {"model": "Ford E-Transit 68kWh",  "cap": 68.0, "p_max": 22.0, "eff": 0.92, "cons_range": (0.25, 0.33)},
+    "Heavy":  {"model": "Mercedes eSprinter",    "cap": 85.0, "p_max": 22.0, "eff": 0.92, "cons_range": (0.30, 0.36)},
 }
 
-# =============================================================================
-# Infrastructure Configs
-# =============================================================================
 INFRA = {
-    45: {"n_evse": 16, "transformer_A": 320, "voltage": 220},
-    90: {"n_evse": 35, "transformer_A": 700, "voltage": 220},
+    45:  {"n_evse": 16, "transformer_kW": 150.0, "voltage": 240},
+    90:  {"n_evse": 35, "transformer_kW": 300.0, "voltage": 240},
+    180: {"n_evse": 60, "transformer_kW": 600.0, "voltage": 240},
 }
 
 
-def generate_scenarios(output_file="simulation_data_v2.json"):
-    """Generate adversarial bottleneck scenarios for both fleet sizes."""
+def generate_scenarios():
+    os.makedirs("data", exist_ok=True)
+    aemo_data = build_aemo_vic1_dataset()
 
-    # ── 1. Time Configuration ────────────────────────────────────────
-    # 96 steps × 15 min = 24 h, starting 06:00
     start_time = datetime.strptime("2026-02-12 06:00", "%Y-%m-%d %H:%M")
     time_steps = [start_time + timedelta(minutes=15 * i) for i in range(96)]
 
     def hour_to_idx(h):
-        """Hour of day → step index (relative to 06:00 start)."""
         return int((h - 6) * 4)
 
-    # ── 2. Environmental Forecasts ───────────────────────────────────
     def get_tou(dt):
-        """Real Australian commercial weekday tariff, $/kWh."""
         halfhour_idx = (dt.hour * 60 + dt.minute) // 30
-        return _TOU_HALFHOUR_CKWH[halfhour_idx] / 100.0  # c/kWh → $/kWh
+        return _TOU_HALFHOUR_CKWH[halfhour_idx] / 100.0
 
     tou_profile = [get_tou(t) for t in time_steps]
 
-    pv_profile = []
+    # 20 kW PV array + 10 kWh / 5 kW BESS peak-shaving dispatch (discharges 15:00-19:00 during Peak TOU)
+    pv_profile = aemo_data["days"][0]["pv_forecast_kw"]
+    bess_profile = []
     for t in time_steps:
-        if 7 <= t.hour < 19:
-            x = (t.hour + t.minute / 60.0 - 7) / 12.0
-            pv_profile.append(max(0.0, 50.0 * np.sin(x * np.pi)))
+        if 15 <= t.hour < 19:
+            bess_profile.append(2.5)  # 2.5 kW x 4h = 10 kWh BESS peak discharge
+        elif 10 <= t.hour < 14:
+            bess_profile.append(-2.5) # Solar midday recharge
         else:
-            pv_profile.append(0.0)
+            bess_profile.append(0.0)
 
-    base_load = [10.0 + (15.0 if 8 <= t.hour < 18 else 0.0) for t in time_steps]
-
-    # ── 3. EV Generation Helpers ─────────────────────────────────────
     ev_counter = 0
 
-    def make_ev(archetype, arr_idx, dep_idx, energy_frac, is_priority):
-        """Create a single EV dict."""
+    def make_ev(archetype, arr_idx, dep_idx, energy_frac, is_priority, rng):
         nonlocal ev_counter
         arc = ARCHETYPES[archetype]
-        arr_clipped = int(np.clip(arr_idx, 0, 95))
-        dep_clipped = int(np.clip(dep_idx, 0, 95))
-        arr_dt = start_time + timedelta(minutes=15 * arr_clipped)
-        dep_dt = start_time + timedelta(minutes=15 * dep_clipped)
+        cap = arc["cap"]
+        arr_c = int(np.clip(arr_idx, 0, 90))
+        dep_c = int(np.clip(dep_idx, arr_c + 8, 95))
+        arr_dt = start_time + timedelta(minutes=15 * arr_c)
+        dep_dt = start_time + timedelta(minutes=15 * dep_c)
+
+        # Empirical route energy calculation (Fiori & Marzano 2018; Vales-Alonso & Alcaraz 2026)
+        req_e = round(cap * energy_frac, 2)
+        reserve_kwh = round(0.10 * cap, 2)  # SoC_min = 10%
+        eod_soc_kwh = round(float(rng.uniform(0.12, 0.25) * cap), 2)
+        mission_total = eod_soc_kwh + req_e
+        return_kwh = round(min(8.0, 0.18 * req_e), 2)
+        next_trip_kwh = round(max(4.0, mission_total - return_kwh - reserve_kwh), 2)
+
+        # Re-align target_energy_kwh so E_i^req = next_trip + return + reserve - eod_soc holds exactly
+        req_e = round(max(5.0, next_trip_kwh + return_kwh + reserve_kwh - eod_soc_kwh), 2)
+
+        w_i = round(float(rng.uniform(2.5, 4.5) if is_priority else rng.uniform(0.5, 1.4)), 2)
+        further_trips = round(float(rng.uniform(0.0, 4.0) if is_priority else 0.0), 2)
+        next_day_dep = int(rng.integers(92, 108))
+        next_day_req = round(float(cap * rng.uniform(0.30, 0.55)), 2)
+
         ev = {
             "id": f"EV_{ev_counter:03d}",
             "arrival": arr_dt.isoformat(),
             "departure": dep_dt.isoformat(),
-            "arrival_idx": arr_clipped,
-            "departure_idx": dep_clipped,
-            "req_energy": round(arc["cap"] * energy_frac, 2),
+            "arrival_idx": arr_c,
+            "departure_idx": dep_c,
+            "req_energy": req_e,
             "p_max": arc["p_max"],
-            "battery_cap_kwh": arc["cap"],
+            "battery_cap_kwh": cap,
+            "eod_soc_kwh": eod_soc_kwh,
+            "next_trip_kwh": next_trip_kwh,
+            "return_kwh": return_kwh,
+            "reserve_kwh": reserve_kwh,
+            "further_trips_today_kwh": further_trips,
+            "next_day_dep_idx": next_day_dep,
+            "next_day_req_kwh": next_day_req,
+            "trip_criticality_w": w_i,
             "priority": "High" if is_priority else "Low",
             "archetype": archetype,
         }
         ev_counter += 1
         return ev
 
-    def make_batch(
-        n, archetype, arr_range, dwell_range, energy_range, is_priority, rng
-    ):
-        """Generate a batch of EVs with given parameter ranges."""
+    def make_batch(n, archetype, arr_range, dwell_range, energy_range, is_priority, rng):
         evs = []
         for _ in range(n):
-            arr = rng.integers(arr_range[0], arr_range[1] + 1)
-            dwell = rng.integers(dwell_range[0], dwell_range[1] + 1)
+            arr = int(rng.integers(arr_range[0], arr_range[1] + 1))
+            dwell = int(rng.integers(dwell_range[0], dwell_range[1] + 1))
             dep = min(95, arr + dwell)
-            efrac = rng.uniform(energy_range[0], energy_range[1])
-            evs.append(make_ev(archetype, arr, dep, efrac, is_priority))
+            efrac = float(rng.uniform(energy_range[0], energy_range[1]))
+            evs.append(make_ev(archetype, arr, dep, efrac, is_priority, rng))
         return evs
 
     def finalize(ev_list):
-        """Sort by arrival, add laxity metadata for analysis."""
         ev_list.sort(key=lambda x: x["arrival_idx"])
         for ev in ev_list:
             avail_steps = ev["departure_idx"] - ev["arrival_idx"]
@@ -183,301 +141,123 @@ def generate_scenarios(output_file="simulation_data_v2.json"):
             ev["avail_steps"] = avail_steps
         return ev_list
 
-    # ── 4. Scenario Generators ───────────────────────────────────────
-
     def gen_s1(n_evs, seed=100):
-        """S1 - Baseline: Mild, uniform arrivals, moderate energy, relaxed
-        deadlines. Both AQPS and LLF should handle this well. 27% priority."""
         nonlocal ev_counter
         ev_counter = 0
         rng = np.random.default_rng(seed)
-
-        n_pri = int(n_evs * 0.27)
+        n_pri = int(round(n_evs * 0.27))
         n_nonpri = n_evs - n_pri
-
         evs = []
-        # Non-priority: uniform 06:00-16:00, moderate energy, long dwell
-        evs += make_batch(
-            n=n_nonpri,
-            archetype="Light",
-            arr_range=(hour_to_idx(6), hour_to_idx(16)),
-            dwell_range=(20, 44),  # 5-11 hours
-            energy_range=(0.25, 0.55),  # moderate
-            is_priority=False,
-            rng=rng,
-        )
-        # Alternate archetypes + re-roll energy per archetype
-        for i, ev in enumerate(evs):
-            arc_name = "Light" if i % 2 == 0 else "Medium"
-            arc = ARCHETYPES[arc_name]
-            ev["archetype"] = arc_name
-            ev["p_max"] = arc["p_max"]
-            ev["battery_cap_kwh"] = arc["cap"]
-            ev["req_energy"] = round(arc["cap"] * rng.uniform(0.25, 0.55), 2)
-
-        # Priority: uniform 07:00-15:00, moderate energy, generous dwell
-        pri_evs = make_batch(
-            n=n_pri,
-            archetype="Medium",
-            arr_range=(hour_to_idx(7), hour_to_idx(15)),
-            dwell_range=(20, 40),  # 5-10 hours
-            energy_range=(0.30, 0.55),
-            is_priority=True,
-            rng=rng,
-        )
-        for i, ev in enumerate(pri_evs):
-            arc_name = "Light" if i % 2 == 0 else "Medium"
-            arc = ARCHETYPES[arc_name]
-            ev["archetype"] = arc_name
-            ev["p_max"] = arc["p_max"]
-            ev["battery_cap_kwh"] = arc["cap"]
-            ev["req_energy"] = round(arc["cap"] * rng.uniform(0.30, 0.55), 2)
-
-        evs += pri_evs
+        for i in range(n_nonpri):
+            arc = "Light" if i % 2 == 0 else "Medium"
+            evs += make_batch(1, arc, (hour_to_idx(6), hour_to_idx(16)), (20, 44), (0.25, 0.50), False, rng)
+        for i in range(n_pri):
+            arc = "Light" if i % 2 == 0 else "Medium"
+            evs += make_batch(1, arc, (hour_to_idx(7), hour_to_idx(15)), (20, 40), (0.30, 0.52), True, rng)
         return finalize(evs)
 
     def gen_s3(n_evs, seed=200):
-        """S3 - LLF Trap: 50% priority.
-
-        Non-priority DECOYS:
-          - Arrive 07:00-10:00 (shifted later so they are STILL actively
-            charging when priority EVs arrive at 10:00-13:00)
-          - Huge energy need (75-95% of Medium battery = 56-71 kWh)
-          - TIGHT deadlines (4-6 hours dwell -> near-zero laxity)
-          - 80% of NP pool are decoys to saturate chargers
-          - LLF sees low laxity -> locks onto them
-
-        Priority EVs:
-          - Arrive mid-day (10:00-13:00, tighter window for max overlap)
-          - Moderate energy (40-60% of cap)
-          - Moderate dwell (5-8 hours)
-          - LLF refuses to cut off low-laxity decoys -> priority starves
-          - AQPS preempts decoys via Layer 1
-        """
+        """S2 Contention (key S3_HighPriority): Early high-demand NP cohort vs mid-day Priority."""
         nonlocal ev_counter
         ev_counter = 0
         rng = np.random.default_rng(seed)
-
-        n_pri = int(n_evs * 0.50)
+        n_pri = int(round(n_evs * 0.50))
         n_nonpri = n_evs - n_pri
-
-        evs = []
-
-        # ── Non-Priority DECOYS: hungry, tight, overlap with priority ─
-        n_decoys = int(n_nonpri * 0.80)  # 80% of NP are decoys
+        n_decoys = int(round(n_nonpri * 0.80))
         n_normal_np = n_nonpri - n_decoys
-
-        # Decoys: Medium archetype, arrive 07:00-10:00 so they're still
-        # active at 10:00-13:00 when priority EVs show up
-        evs += make_batch(
-            n=n_decoys,
-            archetype="Medium",
-            arr_range=(hour_to_idx(7), hour_to_idx(10)),  # 07:00-10:00
-            dwell_range=(16, 24),  # 4-6 hours (tight!)
-            energy_range=(0.75, 0.95),  # 56-71 kWh
-            is_priority=False,
-            rng=rng,
-        )
-
-        # Normal non-priority: filler, spread out, relaxed
-        evs += make_batch(
-            n=n_normal_np,
-            archetype="Light",
-            arr_range=(hour_to_idx(6), hour_to_idx(14)),
-            dwell_range=(24, 40),
-            energy_range=(0.25, 0.50),
-            is_priority=False,
-            rng=rng,
-        )
-
-        # ── Priority EVs: tighter mid-day window for max overlap ─────
-        evs += make_batch(
-            n=n_pri,
-            archetype="Medium",
-            arr_range=(hour_to_idx(10), hour_to_idx(13)),  # 10:00-13:00
-            dwell_range=(20, 32),  # 5-8 hours
-            energy_range=(0.40, 0.60),  # 30-45 kWh
-            is_priority=True,
-            rng=rng,
-        )
-
+        evs = []
+        evs += make_batch(n_decoys, "Medium", (hour_to_idx(7), hour_to_idx(10)), (16, 24), (0.72, 0.88), False, rng)
+        evs += make_batch(n_normal_np, "Light", (hour_to_idx(6), hour_to_idx(14)), (24, 40), (0.25, 0.48), False, rng)
+        evs += make_batch(n_pri, "Medium", (hour_to_idx(10), hour_to_idx(13)), (20, 30), (0.40, 0.58), True, rng)
         return finalize(evs)
 
     def gen_s6(n_evs, seed=300):
-        """S6 - Peak Stress: 50% priority, PM clustering.
-
-        Non-priority BLOCKERS:
-          - Cluster just BEFORE PM peak (13:00-15:00)
-          - Extreme energy (75-90% of Medium = 56-67 kWh)
-          - Tight deadlines (4-6 hours -> depart 17:00-21:00)
-          - Perfectly timed to hog chargers during TOU peak
-
-        Priority EVs:
-          - Arrive during peak (15:00-18:00)
-          - Moderate-high energy (50-70% of cap)
-          - Moderate dwell (4-7 hours)
-          - Must charge during peak pricing window
-          - LLF blocked by low-laxity non-priority -> priority starves
-        """
+        """S3 Peak Stress (key S6_PeakStress): Pre-peak NP blockers vs Peak TOU Priority arrivals."""
         nonlocal ev_counter
         ev_counter = 0
         rng = np.random.default_rng(seed)
-
-        n_pri = int(n_evs * 0.50)
+        n_pri = int(round(n_evs * 0.50))
         n_nonpri = n_evs - n_pri
-
-        evs = []
-
-        # ── Non-Priority BLOCKERS: pre-peak cluster ──────────────────
-        n_blockers = int(n_nonpri * 0.75)
+        n_blockers = int(round(n_nonpri * 0.75))
         n_normal_np = n_nonpri - n_blockers
-
-        # Blockers: arrive 13:00-15:00, extreme energy, tight
-        evs += make_batch(
-            n=n_blockers,
-            archetype="Medium",
-            arr_range=(hour_to_idx(13), hour_to_idx(15)),  # just before peak
-            dwell_range=(16, 24),  # 4-6 hours
-            energy_range=(0.75, 0.90),  # 56-67 kWh
-            is_priority=False,
-            rng=rng,
-        )
-
-        # Normal non-priority: morning arrivals, relaxed
-        evs += make_batch(
-            n=n_normal_np,
-            archetype="Light",
-            arr_range=(hour_to_idx(6), hour_to_idx(12)),
-            dwell_range=(24, 40),
-            energy_range=(0.25, 0.45),
-            is_priority=False,
-            rng=rng,
-        )
-
-        # ── Priority EVs: arrive during peak ─────────────────────────
-        evs += make_batch(
-            n=n_pri,
-            archetype="Medium",
-            arr_range=(hour_to_idx(15), hour_to_idx(18)),  # peak window
-            dwell_range=(16, 28),  # 4-7 hours
-            energy_range=(0.50, 0.70),  # 37-52 kWh
-            is_priority=True,
-            rng=rng,
-        )
-
+        evs = []
+        evs += make_batch(n_blockers, "Medium", (hour_to_idx(13), hour_to_idx(15)), (16, 24), (0.72, 0.86), False, rng)
+        evs += make_batch(n_normal_np, "Light", (hour_to_idx(6), hour_to_idx(12)), (24, 40), (0.25, 0.45), False, rng)
+        evs += make_batch(n_pri, "Medium", (hour_to_idx(15), hour_to_idx(18)), (16, 26), (0.45, 0.64), True, rng)
         return finalize(evs)
 
-    # ── 5. Generate All Variants ─────────────────────────────────────
     generators = {
         "S1_Baseline": gen_s1,
         "S3_HighPriority": gen_s3,
         "S6_PeakStress": gen_s6,
     }
 
-    fleet_sizes = [45, 90]
-    scenarios = {}
-    infra_configs = {}
-
-    for size in fleet_sizes:
-        for sname, gen_fn in generators.items():
-            scenarios.setdefault(size, {})[sname] = gen_fn(
-                n_evs=size, seed=hash((sname, size)) % 10000
-            )
-            cfg = INFRA[size]
-            infra_configs[size] = {
-                "n_evse": cfg["n_evse"],
-                "transformer_capacity_A": cfg["transformer_A"],
-                "transformer_capacity_kW": round(
-                    cfg["transformer_A"] * cfg["voltage"] / 1000, 1
-                ),
-                "voltage_V": cfg["voltage"],
-                "max_rate_per_evse_A": 32,
-            }
-
-    # ── 6. Summary Statistics ────────────────────────────────────────
-    def compute_summary(evs):
-        pri = [e for e in evs if e["priority"] == "High"]
-        npri = [e for e in evs if e["priority"] == "Low"]
-        return {
-            "total_evs": len(evs),
-            "priority_evs": len(pri),
-            "non_priority_evs": len(npri),
-            "priority_pct": round(len(pri) / len(evs) * 100, 1),
-            "total_energy_kwh": round(sum(e["req_energy"] for e in evs), 1),
-            "priority_energy_kwh": round(sum(e["req_energy"] for e in pri), 1),
-            "non_priority_energy_kwh": round(sum(e["req_energy"] for e in npri), 1),
-            "avg_laxity_priority": (
-                round(np.mean([e["laxity_steps"] for e in pri]), 1) if pri else None
-            ),
-            "avg_laxity_non_priority": (
-                round(np.mean([e["laxity_steps"] for e in npri]), 1) if npri else None
-            ),
-            "min_laxity_non_priority": (
-                round(min(e["laxity_steps"] for e in npri), 1) if npri else None
-            ),
-        }
-
-    # ── 7. Output ────────────────────────────────────────────────────
     environment = {
         "tou_tariff": tou_profile,
         "pv_forecast": pv_profile,
-        "base_load": base_load,
-        "bess": [0.0] * 96,
+        "bess": bess_profile,
+        "step_delta": 0.25,
     }
 
-    metadata = {
-        "step_minutes": 15,
-        "horizon": 96,
-        "start_time": "2026-02-12 06:00",
-        "description": (
-            "Adversarial bottleneck scenarios for AQPS vs LLF comparison. "
-            "TOU: Australian commercial weekday tariff (off-peak 17.81, "
-            "shoulder 20.87, peak 31.21 c/kWh)."
-        ),
-        "fleet_sizes": fleet_sizes,
-        "scenario_types": ["S1_Baseline", "S3_HighPriority", "S6_PeakStress"],
-    }
-
-    all_summaries = {}
-
-    for size in fleet_sizes:
-        sc = scenarios[size]
-        summ = {k: compute_summary(v) for k, v in sc.items()}
-        all_summaries[size] = summ
-
+    for size in [45, 90, 180]:
+        sc = {}
+        for sname, fn in generators.items():
+            sc[sname] = fn(n_evs=size, seed=(1000 + size + len(sname) * 17))
         file_data = {
-            "metadata": metadata,
-            "infrastructure": infra_configs[size],
+            "metadata": {
+                "step_minutes": 15,
+                "horizon": 96,
+                "start_time": "2026-02-12 06:00",
+                "fleet_size": size,
+            },
+            "infrastructure": INFRA[size],
             "environment": environment,
             "scenarios": sc,
-            "summary": summ,
         }
-
         fname = f"simulation_data_{size}EVs.json"
         with open(fname, "w") as f:
             json.dump(file_data, f, indent=2)
-        print(f"Generated {fname}")
+        print(f"[WP2] Generated {fname} ({INFRA[size]['n_evse']} EVSEs, {INFRA[size]['transformer_kW']} kW)")
 
-    # Print summary table
-    print(f"\n{'='*75}")
-    print(
-        f"{'Scenario':<20} {'EVs':>4} {'Pri':>4} {'NPri':>5} "
-        f"{'TotE(kWh)':>10} {'AvgLax_P':>9} {'AvgLax_NP':>10} {'MinLax_NP':>10}"
-    )
-    print(f"{'-'*75}")
-    for size in fleet_sizes:
-        for key, s in all_summaries[size].items():
-            label = f"{key}({size})"
-            print(
-                f"{label:<20} {s['total_evs']:>4} {s['priority_evs']:>4} "
-                f"{s['non_priority_evs']:>5} {s['total_energy_kwh']:>10.1f} "
-                f"{s['avg_laxity_priority'] or 0:>9.1f} "
-                f"{s['avg_laxity_non_priority'] or 0:>10.1f} "
-                f"{s['min_laxity_non_priority'] or 0:>10.1f}"
-            )
-    print(f"{'='*75}")
-
-    return scenarios
+    # Generate scripted operator injections for E2
+    injections = {
+        "case_1_breakdown": {
+            "time_idx": 24,  # 12:00 PM
+            "type": "vehicle_breakdown",
+            "description": "Priority van EV_025 breaks down on route; standby NP van EV_005 promoted with urgent 32 kWh requirement and 15:30 deadline.",
+            "promote_id": "EV_005",
+            "new_req_kwh": 32.0,
+            "new_dep_idx": 38,
+            "new_w": 4.2,
+            "operator_choice": "recommended",
+        },
+        "case_2_driver_unavailable": {
+            "time_idx": 28,  # 13:00 PM
+            "type": "driver_unavailable",
+            "description": "Driver absence delays EV_030 departure by +2h (laxity increases, triggering safe-release for incoming urgent EV_038).",
+            "delay_id": "EV_030",
+            "delay_steps": 8,
+            "operator_choice": "recommended",
+        },
+        "case_3_roster_swap": {
+            "time_idx": 22,  # 11:30 AM
+            "type": "roster_swap",
+            "description": "FMS swaps afternoon delivery route between EV_028 (Priority) and EV_008 (Non-Priority); operator accepts business-continuity option.",
+            "swap_from_id": "EV_028",
+            "swap_to_id": "EV_008",
+            "operator_choice": "keep_all_urgent",
+        },
+        "case_4_pv_shortfall": {
+            "time_idx": 24,  # 12:00 PM
+            "type": "pv_shortfall",
+            "description": "Sudden cloud front drops rooftop PV output from 17.8 kW forecast to 4.2 kW actual during midday window.",
+            "pv_drop_factor": 0.25,
+            "operator_choice": "recommended",
+        },
+    }
+    with open(os.path.join("data", "operator_injections.json"), "w") as f:
+        json.dump(injections, f, indent=2)
+    print("[WP2] Saved scripted operator injections to data/operator_injections.json")
 
 
 if __name__ == "__main__":
