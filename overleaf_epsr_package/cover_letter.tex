@@ -1,0 +1,38 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+\begin{document}
+
+\noindent \today \\[1em]
+Editor-in-Chief \\
+\textit{Electric Power Systems Research} \\
+Elsevier \\[1em]
+Dear Editor-in-Chief, \\[1em]
+Please find enclosed our manuscript entitled \textbf{``Schedule-Aware Real-time Depot Charging for Electric Fleets''} by Mohammad Kamar Uddin, Ali Moradi Amani, and Hui Song, which we are submitting for consideration for publication as a Research Paper in \textit{Electric Power Systems Research}.
+
+As commercial logistics and municipal vehicle fleets rapidly electrify, depot operators face a severe operational bottleneck: limited Level-2 charger counts ($M < n$) and distribution transformer capacity limits clash with tight multi-shift vehicle schedules, intra-day disruptions, and volatile time-of-use (ToU) electricity tariffs. Existing depot charging controllers either rely on static priority flags without closed-loop feasibility verification or solve receding-horizon Model Predictive Control (MPC) problems at every time step without safe preemption or dispatcher decision support.
+
+In this paper, we present a closed-loop, three-layer \textbf{Adaptive Queuing-based Predictive Scheduling (AQPS)} framework (\texttt{AQPS-RT-ET}) tailored for power-constrained commercial EV depots:
+\begin{enumerate}
+    \item \textbf{Layer 0 (Schedule-Derived Priority Selection with Optimizer Feasibility Check):} Computes each vehicle's mission-sufficient session energy requirement from the fleet roster, scores urgency via the Apparent Tardiness Cost (ATC) index, and uses bisection over the Layer~2 convex Quadratic Program (QP) to select the largest feasible priority set with zero predicted shortfall.
+    \item \textbf{Layer 1 (Multi-Queue Management with Safe Release and Active Priority Rotation):} Introduces an Active Priority Charging Queue ($Q_k^{act}$, capacity $M$) alongside waiting queues $Q_k^p$ and $Q_k^n$ with a four-tier disconnection hierarchy (laxity-based non-priority preemption, three-condition kWh safe release, guarded FIFO rotation from $Q_k^{act}$, and operator escalation) that resolves priority-on-priority charger deadlocks.
+    \item \textbf{Layer 2 (Two-Way Coupled Event-Triggered MPC \& Human-in-the-Loop Impact Preview):} Reduces Layer~2 QP solve counts by up to 26.3\% with sub-65~ms MOSEK solve times for fleets up to 180~EVs, while providing dispatchers with three quantified what-if QP options during disruptions.
+\end{enumerate}
+
+Comprehensive simulations using empirical commercial EV van parameters and historical Australian Energy Market Operator (AEMO) rooftop PV forecast and actual data demonstrate 100.0\% mission sufficiency, 95.9--100.0\% priority demand fulfillment, and 23.1--34.1\% cost reductions over Least Laxity First (\texttt{LLF}) and Earliest Deadline First (\texttt{EDF}).
+
+We confirm that this manuscript is original, has not been published elsewhere, and is not currently under consideration by another journal. All authors have approved the manuscript and declare no conflicts of interest.
+
+Thank you for your time and consideration.
+
+\vspace{1.5em}
+\noindent Sincerely, \\[1em]
+\textbf{Mohammad Kamar Uddin} \\
+School of Engineering, RMIT University \\
+Melbourne, VIC 3000, Australia \\
+Email: \texttt{s3955218@student.rmit.edu.au} \\[0.5em]
+On behalf of co-authors: \\
+Dr. Ali Moradi Amani (RMIT University) \\
+Dr. Hui Song (University of Newcastle)
+
+\end{document}
