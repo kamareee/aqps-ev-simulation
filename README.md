@@ -1,3 +1,18 @@
+# AQPS depot charging simulator: revision v3
+
+## Run order (local machine, MOSEK licence required)
+```bash
+uv sync                                                    # or: pip install -r requirements.txt
+python scripts/download_aemo_pv.py --start 2024-07 --end 2025-06   # ~0.4 GB from NEMWeb
+python scripts/prepare_aemo_pv.py                          # -> data/aemo_vic1_selected_days.json
+python data_generator.py                                   # -> simulation_data_{45,90,180}EVs.json
+python run_all_experiments.py --exp all                    # resumable; -> results/E1..E7
+```
+Quick code check without MOSEK: `python run_all_experiments.py --smoke --solver CLARABEL` (writes `results_smoke/`).
+See `CLAUDE.md`, `docs/fix_plan_v3.md` and `docs/results_map.md`. Superseded material is in `legacy/`.
+
+---
+
 # Adaptive Queuing Priority Scheduler (AQPS)
 
 A computationally efficient, real-time deployable scheduler for priority-aware EV fleet charging.

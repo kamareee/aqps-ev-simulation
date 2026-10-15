@@ -1,159 +1,88 @@
 """
-WP4 — Operator Impact-Preview Loop (Grounded in Parasuraman, Sheridan & Wickens, 2000:
-Level of Automation "executes recommended option provisionally unless vetoed").
+Operator impact preview (Parasuraman, Sheridan & Wickens 2000, "executes unless vetoed").
+
+Three what-if Layer-2 solves over the connected set:
+  recommended      : the Layer-0/1 priority set
+  keep_all_urgent  : additionally promote the most urgent connected non-priority EV (business continuity)
+  downgrade        : demote the least urgent priority EV whose mission is already met (or the least urgent)
+The recommended option is applied provisionally; the scripted operator choice then replaces it.
+Reported per option: horizon energy cost ($) and expected energy at departure for affected EVs.
 """
 
-from dataclasses import dataclass
-from typing import List, Dict
+from dataclasses import dataclass, field
+from typing import Dict, List
+
 import numpy as np
+
 from .data_structures import Vehicle
-from .tou_optimization import TOUOptimizer
+from .tou_optimization import TOUOptimizer, OK
 
 
 @dataclass
-class PreviewOption:
-    option_id: str
-    description: str
-    priority_ids: List[str]
-    expected_departure_kwh: Dict[str, float]
-    estimated_horizon_cost: float
-    cost_delta: float
-    solve_time_ms: float
+class PreviewRecord:
+    t: int
+    trigger: str
+    options: List[Dict] = field(default_factory=list)
+    chosen: str = "recommended"
+    extra_cost: float = 0.0
+    solves: int = 0
+    solve_ms: float = 0.0
 
 
-@dataclass
-class ImpactPreviewRecord:
-    time_idx: int
-    trigger_reason: str
-    affected_vehicles: List[str]
-    options: List[PreviewOption]
-    selected_option_id: str
-    extra_cost_accepted: float
-    total_preview_solve_ms: float
+class ImpactPreview:
+    def __init__(self, optimizer: TOUOptimizer, dt_h: float):
+        self.opt = optimizer
+        self.dt = float(dt_h)
+        self.log: List[PreviewRecord] = []
 
+    def _cost(self, sched: np.ndarray, tou, pv, bess) -> float:
+        H = sched.shape[1] if sched.size else 0
+        if H == 0:
+            return 0.0
+        P = sched.sum(axis=0)
+        g = np.maximum(0.0, P - np.asarray(pv[:H]) - np.asarray(bess[:H]))
+        return float(np.sum(np.asarray(tou[:H]) * g) * self.dt)
 
-class OperatorImpactPreview:
-    def __init__(
-        self,
-        optimizer: TOUOptimizer,
-        cost_threshold_dollars: float = 5.0,
-        dt_hours: float = 0.25,
-    ):
-        self.optimizer = optimizer
-        self.cost_threshold_dollars = cost_threshold_dollars
-        self.dt = dt_hours
-        self.preview_logs: List[ImpactPreviewRecord] = []
+    def _what_if(self, name, t, conn: List[Vehicle], pri: set, tou, pv, bess, rec: PreviewRecord):
+        evs = [{"id": v.id, "session_rem": v.session_remaining, "mission_rem": v.mission_remaining,
+                "p_max": v.p_max_kw, "dep_idx": v.departure_idx, "is_priority": v.id in pri} for v in conn]
+        r = self.opt.solve(t, evs, tou, pv, bess)
+        soft = False
+        if r.status not in OK:
+            r = self.opt.solve(t, evs, tou, pv, bess, soft=True)
+            soft = True
+            rec.solves += 1
+            rec.solve_ms += r.solve_ms
+        rec.solves += 1
+        rec.solve_ms += r.solve_ms
+        plan = r.plan() if r.status in OK else {}
+        dep_e = {v.id: round(v.current_energy_kwh + float(np.sum(plan.get(v.id, [0.0]))) * self.dt, 2)
+                 for v in conn}
+        cost = self._cost(r.schedule, tou, pv, bess) if r.status in OK else float("nan")
+        return {"option": name, "priority_ids": sorted(pri), "horizon_cost": round(cost, 3),
+                "soft": soft, "departure_energy_kwh": dep_e}
 
-    def evaluate_preview(
-        self,
-        time_idx: int,
-        trigger_reason: str,
-        admitted_vehicles: List[Vehicle],
-        escalated_ids: List[str],
-        horizon: int,
-        tou_prices: np.ndarray,
-        pv_forecast: np.ndarray,
-        bess_forecast: np.ndarray,
-        baseline_cost: float,
-        operator_script_choice: str = "recommended",
-    ) -> ImpactPreviewRecord:
-        options: List[PreviewOption] = []
-        total_ms = 0.0
-
-        # Snapshot Layer 0/1 recommended priority set BEFORE running what-if options
-        recommended_pri_ids = {v.id for v in admitted_vehicles if v.is_priority}
-
-        def run_what_if(opt_id: str, desc: str, pri_set: set) -> PreviewOption:
-            nonlocal total_ms
-            opt_evs = [
-                {
-                    "id": v.id,
-                    "energy_needed": v.energy_needed,
-                    "max_power": v.max_charging_power_kw,
-                    "dep_time_idx": v.departure_time_idx,
-                    "is_priority": (v.id in pri_set),
-                }
-                for v in admitted_vehicles
-            ]
-            res = self.optimizer.solve(
-                current_time_idx=time_idx,
-                horizon=horizon,
-                active_evs=opt_evs,
-                tou_prices=tou_prices,
-                pv_generation=pv_forecast,
-                bess_generation=bess_forecast,
-                enforce_priority_min=True,
-            )
-            total_ms += res.solve_time_ms
-            exp_dep = {}
-            for v in admitted_vehicles:
-                deliv_h = sum(res.schedule.get(v.id, [])) * self.dt
-                exp_dep[v.id] = round(v.current_energy_kwh + deliv_h, 2)
-            return PreviewOption(
-                option_id=opt_id,
-                description=desc,
-                priority_ids=sorted(list(pri_set)),
-                expected_departure_kwh=exp_dep,
-                estimated_horizon_cost=round(res.total_cost, 2),
-                cost_delta=round(res.total_cost - baseline_cost, 2),
-                solve_time_ms=res.solve_time_ms,
-            )
-
-        # Option 1: Recommended (Layer-0 feasible priority set)
-        opt_rec = run_what_if(
-            "recommended",
-            "Recommended: Layer-0 feasible priority set with safe release & Q_act rotation",
-            recommended_pri_ids,
-        )
-        options.append(opt_rec)
-
-        # Option 2: Keep all urgent (promote highest-ATC non-priority vehicle)
-        promote_set = set(recommended_pri_ids)
-        np_cands = [v for v in admitted_vehicles if v.id not in recommended_pri_ids]
-        if np_cands:
-            np_cands.sort(key=lambda v: v.atc_score, reverse=True)
-            promote_set.add(np_cands[0].id)
-        opt_keep = run_what_if(
-            "keep_all_urgent",
-            "Keep All Urgent: Promote marginal vehicle at higher peak grid cost",
-            promote_set,
-        )
-        options.append(opt_keep)
-
-        # Option 3: Downgrade lowest-ATC priority vehicle
-        downgrade_set = set(recommended_pri_ids)
-        pri_cands = [v for v in admitted_vehicles if v.id in recommended_pri_ids]
-        if len(pri_cands) > 1:
-            pri_cands.sort(key=lambda v: v.atc_score)
-            downgrade_set.discard(pri_cands[0].id)
-        opt_down = run_what_if(
-            "downgrade_marginal",
-            "Cost-Saving Alternative: Downgrade lowest-urgency priority vehicle",
-            downgrade_set,
-        )
-        options.append(opt_down)
-
-        chosen = opt_rec
-        for o in options:
-            if o.option_id == operator_script_choice:
-                chosen = o
-                break
-
-        chosen_set = set(chosen.priority_ids)
-        for v in admitted_vehicles:
-            v.is_priority = (v.id in chosen_set)
-
-        extra_cost = max(0.0, chosen.estimated_horizon_cost - opt_rec.estimated_horizon_cost)
-        affected = sorted(list(set(escalated_ids) | (recommended_pri_ids ^ chosen_set)))
-
-        rec = ImpactPreviewRecord(
-            time_idx=time_idx,
-            trigger_reason=trigger_reason,
-            affected_vehicles=affected,
-            options=options,
-            selected_option_id=chosen.option_id,
-            extra_cost_accepted=round(extra_cost, 2),
-            total_preview_solve_ms=round(total_ms, 3),
-        )
-        self.preview_logs.append(rec)
+    def evaluate(self, t: int, trigger: str, conn: List[Vehicle], tou, pv, bess,
+                 choice: str = "recommended") -> PreviewRecord:
+        rec = PreviewRecord(t=t, trigger=trigger)
+        base = {v.id for v in conn if v.is_priority}
+        np_cands = sorted((v for v in conn if not v.is_priority and v.mission_remaining > 0),
+                          key=lambda v: (-v.atc_score, v.id))
+        keep = set(base) | ({np_cands[0].id} if np_cands else set())
+        pri_sorted = sorted((v for v in conn if v.is_priority),
+                            key=lambda v: (v.mission_remaining > 1e-6, v.atc_score, v.id))
+        down = set(base) - ({pri_sorted[0].id} if pri_sorted else set())
+        opts = [self._what_if("recommended", t, conn, base, tou, pv, bess, rec),
+                self._what_if("keep_all_urgent", t, conn, keep, tou, pv, bess, rec),
+                self._what_if("downgrade", t, conn, down, tou, pv, bess, rec)]
+        for o in opts:
+            o["cost_delta"] = round(o["horizon_cost"] - opts[0]["horizon_cost"], 3)
+        rec.options = opts
+        chosen = next((o for o in opts if o["option"] == choice), opts[0])
+        rec.chosen = chosen["option"]
+        rec.extra_cost = max(0.0, chosen["cost_delta"]) if np.isfinite(chosen["cost_delta"]) else 0.0
+        chosen_set = set(chosen["priority_ids"])
+        for v in conn:
+            v.is_priority = v.id in chosen_set
+        self.log.append(rec)
         return rec

@@ -48,6 +48,10 @@ Thumbs.db
 
 # Project specific
 *.log
-results/
 outputs/
 results_*/
+# results: track manifest.json and summary/*.csv; ignore per-run raw files (large)
+results/*/raw/
+# AEMO raw archives are large and re-downloadable; checksums.csv is tracked
+data/aemo_raw/*.zip
+data/aemo_raw/*.part

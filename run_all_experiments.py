@@ -1,748 +1,617 @@
 """
-WP6 — Master Simulation Experiment Suite (E1 to E7 + E5b Scalability).
+Experiment runner (revision v3): E1-E7.
 
-Features:
-- Resumable per-run execution: saves each run to `results/<exp_id>/raw/<run_id>.json` and skips if already present.
-- Writes `results/<exp_id>/manifest.json` and aggregated `results/<exp_id>/summary/*.csv`.
-- Writes `docs/results_map.md` mapping E1-E7 -> Manuscript Section -> Figure/Table -> Post-processing script.
+Layout (plan §4a)
+  results/<EXP>/manifest.json            git hash, config hash+snapshot, seeds, machine, versions
+  results/<EXP>/raw/<run_id>.json.gz     one file per run (summary + optional per-step trace)
+  results/<EXP>/summary/runs.csv         one row per run (no aggregation; post-processing does that)
+Runs are resumable: an existing raw file is loaded instead of re-run.
+
+Usage
+  python run_all_experiments.py --exp all
+  python run_all_experiments.py --exp E1 E4
+  python run_all_experiments.py --exp E1 --fleet 45 --scenario S2_Contention --methods LLF AQPS-RT-ET
+  python run_all_experiments.py --smoke --solver CLARABEL     # quick code check, writes results_smoke/
 """
 
-import os
-import sys
+import argparse
+import copy
+import gzip
+import hashlib
 import json
-import time
+import os
 import platform
 import subprocess
+import sys
+import time
+from datetime import datetime
+from typing import Dict, List, Optional
+
 import numpy as np
 import pandas as pd
-from datetime import datetime
-from typing import Dict, List, Any
+import yaml
 
-from data_generator import generate_scenarios, INFRA
-from scripts.prepare_aemo_pv import build_aemo_vic1_dataset, OUTPUT_PATH as AEMO_PATH
-from src.aqps.data_structures import Vehicle
-from src.aqps.scheduler import AQPSScheduler
-from src.aqps.baselines import LLFScheduler, EDFScheduler, MPCOnlyScheduler, OfflineOptimalScheduler
-from src.aqps.priority_selection import PrioritySelectorLayer0
+from src.aqps import (AQPSScheduler, AQPSv1Scheduler, EDFScheduler, LLFScheduler, MPCOnlyScheduler,
+                      OfflineOptimal, Vehicle)
 
-
-METHODS_ALL = [
-    "LLF",
-    "EDF",
-    "MPC-only",
-    "Offline-Optimal",
-    "AQPS-static",
-    "AQPS-RT",
-    "AQPS-RT-ET",
-]
-
-SCENARIOS = [
-    ("S1_Baseline", "S1 (27%)"),
-    ("S3_HighPriority", "S2 (50%)"),
-    ("S6_PeakStress", "S3 (50% Peak)"),
-]
+ROOT = os.path.dirname(os.path.abspath(__file__))
+CFG_PATH = os.path.join(ROOT, "config", "experiments.yaml")
+PV_DAYS_PATH = os.path.join(ROOT, "data", "aemo_vic1_selected_days.json")
+INJ_PATH = os.path.join(ROOT, "data", "operator_injections.json")
+ONLINE_AQPS = ("AQPS-static", "AQPS-RT", "AQPS-RT-ET")
+TOL_MISSION = 0.1  # kWh
 
 
-def get_git_hash() -> str:
-    try:
-        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL).decode().strip()
-    except Exception:
-        return "rev_2026_epsr"
+# ============================================================================ helpers
+def load_cfg(path=CFG_PATH) -> Dict:
+    with open(path) as f:
+        return yaml.safe_load(f)
 
 
-def write_manifest(exp_id: str, config_summary: Dict, seeds: List[int]):
-    exp_dir = os.path.join("results", exp_id)
-    os.makedirs(os.path.join(exp_dir, "raw"), exist_ok=True)
-    os.makedirs(os.path.join(exp_dir, "summary"), exist_ok=True)
-    manifest = {
-        "experiment_id": exp_id,
-        "git_commit": get_git_hash(),
-        "run_date": datetime.now().isoformat(),
-        "machine": {
-            "os": platform.platform(),
-            "python": sys.version.split()[0],
-            "processor": platform.processor() or "x86_64/ARM64",
-        },
-        "seeds": seeds,
-        "config": config_summary,
-    }
-    with open(os.path.join(exp_dir, "manifest.json"), "w") as f:
-        json.dump(manifest, f, indent=2)
+def deep_update(d: Dict, u: Dict) -> Dict:
+    d = copy.deepcopy(d)
+    for k, v in (u or {}).items():
+        d[k] = deep_update(d.get(k, {}), v) if isinstance(v, dict) else v
+    return d
 
 
-def build_vehicles(ev_data: List[Dict]) -> Dict[str, Vehicle]:
-    vmap = {}
-    for ev in ev_data:
-        is_p = (ev["priority"] == "High")
-        v = Vehicle(
-            id=ev["id"],
-            arrival_time_idx=int(ev["arrival_idx"]),
-            departure_time_idx=int(ev["departure_idx"]),
-            target_energy_kwh=float(ev["req_energy"]),
-            max_charging_power_kw=float(ev["p_max"]),
-            is_priority=is_p,
-            battery_cap_kwh=float(ev.get("battery_cap_kwh", 68.0)),
-            eod_soc_kwh=float(ev.get("eod_soc_kwh", 15.0)),
-            next_trip_kwh=float(ev.get("next_trip_kwh", 18.0)),
-            return_kwh=float(ev.get("return_kwh", 6.0)),
-            reserve_kwh=float(ev.get("reserve_kwh", 6.8)),
-            further_trips_today_kwh=float(ev.get("further_trips_today_kwh", 0.0)),
-            next_day_dep_idx=int(ev.get("next_day_dep_idx", 96)),
-            next_day_req_kwh=float(ev.get("next_day_req_kwh", 25.0)),
-            trip_criticality_w=float(ev.get("trip_criticality_w", 3.5 if is_p else 1.0)),
-            archetype=ev.get("archetype", "Medium"),
-            day_ahead_priority=is_p,
-        )
-        vmap[v.id] = v
-    return vmap
+def load_fleet(size: int) -> Dict:
+    fn = os.path.join(ROOT, f"simulation_data_{size}EVs.json")
+    if not os.path.exists(fn):
+        sys.exit(f"{fn} missing — run data_generator.py first")
+    with open(fn) as f:
+        return json.load(f)
 
 
-def run_single_simulation(
-    method: str,
-    fleet_size: int,
-    scenario_key: str,
-    scenario_label: str,
-    ev_data: List[Dict],
-    env_data: Dict,
-    n_evse: int = None,
-    transformer_kw: float = None,
-    pv_actual_override: List[float] = None,
-    injections_by_step: Dict[int, Dict] = None,
-    config_overrides: Dict = None,
-) -> Dict[str, Any]:
-    """
-    Runs a single 24-hour simulation (96 steps of 15 min) for any of the 8 methods
-    and returns comprehensive metrics.
-    """
-    horizon = len(env_data["tou_tariff"])
-    dt = float(env_data.get("step_delta", 0.25))
-    num_chargers = n_evse if n_evse is not None else INFRA.get(fleet_size, {"n_evse": max(4, fleet_size // 3)})["n_evse"]
-    site_limit_kw = transformer_kw if transformer_kw is not None else INFRA.get(fleet_size, {"transformer_kW": (fleet_size / 45.0) * 150.0})["transformer_kW"]
+def tier_of(price: float, cfg: Dict) -> str:
+    for tier in ("peak", "shoulder", "off_peak"):
+        if abs(price - cfg["tariff"][tier]["price"]) < 1e-9:
+            return tier
+    return "other"
 
-    config = {
-        "station": {"num_chargers": num_chargers},
-        "grid": {"transformer_limit_kw": site_limit_kw},
-        "simulation": {"dt_hours": dt, "planning_horizon_steps": 24},
-        "optimizer": {},
-        "event_trigger": {},
-    }
-    if config_overrides:
-        for k, sub in config_overrides.items():
-            if isinstance(sub, dict) and k in config:
-                config[k].update(sub)
-            else:
-                config[k] = sub
 
-    vehicles = build_vehicles(ev_data)
-    for v in vehicles.values():
-        v.target_energy_kwh = PrioritySelectorLayer0.compute_session_requirement(
-            v, config["optimizer"].get("reserve_override_kwh", None)
-        )
-        v.energy_needed = v.target_energy_kwh
+def pv_forecast_window(fc: np.ndarray, act_now: float, t: int, ramp: int = 8) -> np.ndarray:
+    """Day-ahead forecast from step t, with a persistence correction of the ratio actual/forecast
+    observed at t that decays linearly back to the day-ahead forecast over `ramp` steps.
+    Applied identically to every optimisation-based method."""
+    base = np.asarray(fc[t:], dtype=float).copy()
+    if base.size and fc[t] > 0.5:
+        ratio = float(np.clip(act_now / fc[t], 0.0, 1.5))
+        w = np.clip(np.arange(base.size) / ramp, 0.0, 1.0)
+        base = base * (ratio + (1.0 - ratio) * w)
+    return base
 
-    tou_full = np.array(env_data["tou_tariff"], dtype=float)
-    pv_fcst_full = np.array(env_data["pv_forecast"], dtype=float)
-    pv_act_full = np.array(pv_actual_override if pv_actual_override is not None else env_data["pv_forecast"], dtype=float)
-    bess_full = np.array(env_data.get("bess", [0.0] * horizon), dtype=float)
 
-    cost_history = []
-    cum_cost = 0.0
-    cost_by_tier = {"off_peak": 0.0, "shoulder": 0.0, "peak": 0.0}
-    pv_used_kwh = 0.0
-    bess_used_kwh = 0.0
-    gross_load_trace = np.zeros(horizon)
-    net_grid_trace = np.zeros(horizon)
-    ev_power_timeline = {v.id: np.zeros(horizon) for v in vehicles.values()}
-    queue_pos_timeline = {v.id: np.full(horizon, np.nan) for v in vehicles.values()}
-    solve_times_ms = []
-    total_l2_solves = 0
-    total_all_solves = 0
-    preemptions = 0
-    safe_releases = 0
-    escalations = 0
-    extra_op_cost = 0.0
-    preemption_events = []
-    starvation_events = []
-    prev_cmds = {}
+def apply_injection(inj: Dict, vehicles: Dict[str, Vehicle], t: int, T: int, pv_act: np.ndarray):
+    typ = inj["type"]
+    if typ == "vehicle_breakdown":
+        v = vehicles[inj["promote_id"]]
+        v.roster_priority = True
+        v.trip_criticality_w = float(inj["new_w"])
+        v.e_mission_kwh = v.energy_delivered + float(inj["new_mission_kwh"])
+        v.e_session_kwh = max(v.e_session_kwh, v.e_mission_kwh)
+        v.next_trip_kwh = max(v.next_trip_kwh, v.current_energy_kwh + float(inj["new_mission_kwh"])
+                              - v.return_kwh - v.reserve_kwh)
+        v.departure_idx = int(max(t + 1, inj["new_dep_idx"]))
+    elif typ == "driver_unavailable":
+        v = vehicles[inj["delay_id"]]
+        v.departure_idx = int(min(T - 1, v.departure_idx + int(inj["delay_steps"])))
+        v.evening_return_idx = int(min(T - 1, v.evening_return_idx + int(inj["delay_steps"])))
+    elif typ == "roster_swap":
+        a, b = vehicles[inj["swap_from_id"]], vehicles[inj["swap_to_id"]]
+        a.roster_priority, b.roster_priority = False, True
+        a.trip_criticality_w, b.trip_criticality_w = 0.8, max(b.trip_criticality_w, 4.0)
+        b.next_trip_kwh, a.next_trip_kwh = a.next_trip_kwh, b.next_trip_kwh
+        for v in (a, b):
+            v.e_mission_kwh = max(0.0, v.mission_level_kwh - v.eod_soc_kwh)
+            v.e_session_kwh = max(v.e_session_kwh, v.e_mission_kwh)
+    elif typ == "promotion":
+        v = vehicles[inj["id"]]
+        v.roster_priority = True
+        v.trip_criticality_w = max(v.trip_criticality_w, float(inj.get("new_w", 3.8)))
+    elif typ == "pv_shortfall":
+        d = int(inj.get("duration_steps", 1))
+        pv_act[t:t + d] *= float(inj["pv_drop_factor"])
+    else:
+        raise ValueError(typ)
+
+
+# ============================================================================ one run
+def simulate(method: str, records: List[Dict], env: Dict, fleet_size: int, n_evse: int, site_kw: float,
+             cfg: Dict, injections: Optional[Dict[int, List[Dict]]] = None,
+             pv_fc: Optional[List[float]] = None, pv_act: Optional[List[float]] = None,
+             reserve_frac: Optional[float] = None, trace: bool = False) -> Dict:
+    dt = cfg["time"]["step_minutes"] / 60.0
+    T = int(env["n_steps"])
+    tou = np.asarray(env["tou_tariff"], dtype=float)
+    fc = np.asarray(pv_fc if pv_fc is not None else env["pv_forecast"], dtype=float)
+    act = np.asarray(pv_act if pv_act is not None else env["pv_actual"], dtype=float).copy()
+    bess = np.asarray(env["bess"], dtype=float)
+    vehicles = {r["id"]: Vehicle.from_record(r, reserve_frac) for r in records}
+    injections = injections or {}
+
+    agg = {"l0": 0, "l2": 0, "prev": 0, "l2_ms": [], "all_ms": 0.0, "soft": 0, "infeas": 0,
+           "commit_inf": 0, "nonopt": 0, "pre": 0, "sr": 0, "rot": 0, "esc": 0, "extra_cost": 0.0,
+           "previews": [], "events": 0}
+    tr = {"gross": [], "net": [], "power": {}, "connected": [], "priority": [], "reasons": []} if trace else None
+    offline_info = None
 
     if method == "Offline-Optimal":
-        t0 = time.perf_counter()
-        oracle = OfflineOptimalScheduler(num_chargers, site_limit_kw, dt)
-        sched_map = oracle.solve_full_day(list(vehicles.values()), tou_full, pv_act_full, bess_full)
-        solve_times_ms.append((time.perf_counter() - t0) * 1000.0)
-        total_l2_solves = 1
-        total_all_solves = 1
-        for t in range(horizon):
-            gross_t = sum(float(sched_map[vid][t]) for vid in sched_map)
-            for vid in sched_map:
-                ev_power_timeline[vid][t] = float(sched_map[vid][t])
-            gross_load_trace[t] = gross_t
-            pv_t = max(0.0, pv_act_full[t])
-            bess_t = max(0.0, bess_full[t])
-            pv_used_t = min(gross_t, pv_t)
-            rem_load = gross_t - pv_used_t
-            bess_used_t = min(rem_load, bess_t)
-            net_grid_t = max(0.0, rem_load - bess_used_t)
-            net_grid_trace[t] = net_grid_t
-            pv_used_kwh += pv_used_t * dt
-            bess_used_kwh += bess_used_t * dt
-            step_c = net_grid_t * tou_full[t] * dt
-            cum_cost += step_c
-            cost_history.append(cum_cost)
-            if tou_full[t] >= 0.30:
-                cost_by_tier["peak"] += step_c
-            elif tou_full[t] >= 0.20:
-                cost_by_tier["shoulder"] += step_c
-            else:
-                cost_by_tier["off_peak"] += step_c
+        # perfect information: injections applied up-front
+        for t0 in sorted(injections):
+            for inj in injections[t0]:
+                apply_injection(inj, vehicles, t0, T, act)
+        solver = OfflineOptimal(cfg, n_evse, site_kw)
+        out = solver.solve(list(vehicles.values()), tou, act, bess, integer=cfg["optimizer"]["solver"] == "MOSEK")
+        offline_info = out["info"]
+        sched = out["schedule"]
+        agg["l2"] = 1
+        agg["l2_ms"] = [offline_info["solve_ms"]]
+        agg["all_ms"] = offline_info["solve_ms"]
+    elif method in ONLINE_AQPS:
+        sched_obj = AQPSScheduler(cfg, n_evse, site_kw, method)
+    elif method == "AQPS-v1":
+        sched_obj = AQPSv1Scheduler(n_evse, site_kw, dt, cfg["optimizer"]["solver"])
+    elif method == "MPC-only":
+        sched_obj = MPCOnlyScheduler(cfg, n_evse, site_kw)
+    elif method == "LLF":
+        sched_obj = LLFScheduler(n_evse, site_kw, dt)
+    elif method == "EDF":
+        sched_obj = EDFScheduler(n_evse, site_kw, dt)
     else:
-        if method == "LLF":
-            sched = LLFScheduler(num_chargers, site_limit_kw, dt)
-        elif method == "EDF":
-            sched = EDFScheduler(num_chargers, site_limit_kw, dt)
-        elif method == "MPC-only":
-            sched = MPCOnlyScheduler(config)
+        raise ValueError(method)
+
+    cost = {"off_peak": 0.0, "shoulder": 0.0, "peak": 0.0, "other": 0.0}
+    gross_tr, pv_used, grid_kwh = np.zeros(T), 0.0, 0.0
+    snap22 = None
+    idx22 = int((22 - cfg["time"]["start_hour"]) / dt)
+
+    for t in range(T):
+        if method != "Offline-Optimal":
+            for inj in injections.get(t, []):
+                apply_injection(inj, vehicles, t, T, act)
+        present = [v for v in vehicles.values() if v.arrival_idx <= t < v.departure_idx]
+        arrivals = [v.id for v in present if v.arrival_idx == t]
+        departures = [v.id for v in vehicles.values() if v.departure_idx == t]
+        inj_now = injections.get(t, [None])[-1] if method in ONLINE_AQPS else None
+
+        if method == "Offline-Optimal":
+            cmds = {v.id: float(sched[v.id][t]) for v in present if sched[v.id][t] > 1e-6}
+            out = {}
+        elif method in ("LLF", "EDF"):
+            out = sched_obj.step(t, present)
+            cmds = out["commands"]
+            agg["all_ms"] += out["all_ms"]
         else:
-            sched = AQPSScheduler(config, mode=method)
-
-        for t in range(horizon):
-            inj = injections_by_step.get(t) if injections_by_step else None
-            if inj is not None:
-                # Apply scripted injection mutation to vehicle pool
-                if inj["type"] == "vehicle_breakdown" and inj.get("promote_id") in vehicles:
-                    pv_v = vehicles[inj["promote_id"]]
-                    pv_v.is_priority = True
-                    pv_v.day_ahead_priority = True
-                    pv_v.trip_criticality_w = float(inj.get("new_w", 4.2))
-                    pv_v.target_energy_kwh = float(inj.get("new_req_kwh", 32.0))
-                    pv_v.energy_needed = max(0.0, pv_v.target_energy_kwh - pv_v.energy_delivered)
-                    pv_v.departure_time_idx = int(inj.get("new_dep_idx", max(t + 8, pv_v.departure_time_idx)))
-                elif inj["type"] == "driver_unavailable" and inj.get("delay_id") in vehicles:
-                    dv = vehicles[inj["delay_id"]]
-                    dv.departure_time_idx = min(95, dv.departure_time_idx + int(inj.get("delay_steps", 8)))
-                elif inj["type"] == "roster_swap":
-                    v_from = vehicles.get(inj.get("swap_from_id"))
-                    v_to = vehicles.get(inj.get("swap_to_id"))
-                    if v_from and v_to:
-                        v_from.is_priority, v_to.is_priority = False, True
-                        v_from.day_ahead_priority, v_to.day_ahead_priority = False, True
-                        v_from.trip_criticality_w, v_to.trip_criticality_w = 0.8, 4.0
-
-            arriving = [v for v in vehicles.values() if v.arrival_time_idx == t]
-            departing = [v.id for v in vehicles.values() if v.departure_time_idx == t]
-
-            tou_h = np.array(list(tou_full[t:]) + [tou_full[-1]] * t, dtype=float)
-            pv_fcst_h = np.array(list(pv_fcst_full[t:]) + [0.0] * t, dtype=float)
-            bess_h = np.array(list(bess_full[t:]) + [0.0] * t, dtype=float)
-            pv_now = float(pv_act_full[t])
-            if inj is not None and inj["type"] == "pv_shortfall":
-                pv_now *= float(inj.get("pv_drop_factor", 0.25))
-
-            if method in ["LLF", "EDF"]:
-                step_res = sched.step(t, arriving, departing, site_limit_kw)
-            elif method == "MPC-only":
-                step_res = sched.step(t, arriving, departing, tou_h, pv_fcst_h, bess_h)
+            pv_h = pv_forecast_window(fc, act[t], t)
+            tou_h, bess_h = tou[t:], bess[t:]
+            if method == "MPC-only":
+                out = sched_obj.step(t, present, tou_h, pv_h, bess_h)
+                agg["l2"] += out["l2_solves"]
+                agg["l2_ms"] += out["l2_ms"]
+                agg["all_ms"] += out["all_ms"]
+                agg["nonopt"] += sum(s not in ("optimal", "optimal_inaccurate") for s in out.get("status", []))
+            elif method == "AQPS-v1":
+                out = sched_obj.step(t, present, tou_h, pv_h, bess_h)
+                agg["l2"] += out["solves"]
+                if out["solves"]:
+                    agg["l2_ms"].append(out["solve_ms"])
+                    agg["all_ms"] += out["solve_ms"]
+                    agg["nonopt"] += int(out["status"] not in ("optimal", "optimal_inaccurate"))
             else:
-                step_res = sched.step(
-                    t, arriving, departing, tou_h, pv_fcst_h, bess_h,
-                    pv_actual_now=pv_now, operator_injection=inj
-                )
+                out = sched_obj.step(t, present, arrivals, departures, tou_h, pv_h, bess_h, float(act[t]), inj_now)
+                agg["l0"] += out["l0_solves"]
+                agg["l2"] += out["l2_solves"]
+                agg["prev"] += out["preview_solves"]
+                agg["l2_ms"] += out["l2_ms"]
+                agg["all_ms"] += out["all_ms"]
+                agg["soft"] += out["soft_solves"]
+                agg["infeas"] += out["infeasible_first"]
+                agg["commit_inf"] += out["committed_infeasible"]
+                agg["nonopt"] += sum(s not in ("optimal", "optimal_inaccurate") for s in out["status"])
+                agg["pre"] += len(out["preempted"])
+                agg["sr"] += len(out["safe_released"])
+                agg["rot"] += len(out["rotated"])
+                agg["esc"] += len(out["escalation_new"])
+                agg["events"] += int(out["event_reasons"] != [])
+                if out["preview"] is not None:
+                    rec = out["preview"]
+                    agg["extra_cost"] += rec.extra_cost
+                    agg["previews"].append({"t": rec.t, "trigger": rec.trigger, "chosen": rec.chosen,
+                                            "extra_cost": rec.extra_cost, "options": rec.options})
+            cmds = out["commands"]
 
-            cmds = step_res.get("commands", {})
-            if step_res.get("l2_solves", 0) > 0:
-                solve_times_ms.append(float(step_res.get("solve_time_ms", 0.0)))
-            total_l2_solves += int(step_res.get("l2_solves", 0))
-            total_all_solves += int(step_res.get("total_solves", step_res.get("l2_solves", 0)))
+        # apply commands (single place where energy changes, for every method)
+        gross = 0.0
+        for vid, p in cmds.items():
+            v = vehicles[vid]
+            p = max(0.0, min(p, v.p_max_kw, v.session_remaining / dt))
+            v.energy_delivered += p * dt
+            cmds[vid] = p
+            gross += p
+        if gross > site_kw + 1e-6:
+            raise RuntimeError(f"{method}: site limit violated at t={t}: {gross:.2f} kW")
+        net = max(0.0, gross - act[t] - bess[t])
+        cost[tier_of(tou[t], cfg)] += net * tou[t] * dt
+        gross_tr[t] = gross
+        grid_kwh += net * dt
+        pv_used += min(act[t], gross + max(0.0, -bess[t])) * dt
+        if t == idx22:
+            snap22 = {vid: v.energy_delivered for vid, v in vehicles.items()}
+        if trace:
+            tr["gross"].append(round(gross, 4))
+            tr["net"].append(round(net, 4))
+            for vid, p in cmds.items():
+                tr["power"].setdefault(vid, [0.0] * T)[t] = round(p, 4)
+            tr["connected"].append(out.get("connected", sorted(cmds)) if out else sorted(cmds))
+            tr["priority"].append(sorted(v.id for v in present if v.is_priority))
+            tr["reasons"].append(out.get("event_reasons", []) if out else [])
 
-            for vid, p_cmd in cmds.items():
-                ev_power_timeline[vid][t] = float(p_cmd)
+    return summarise(method, vehicles, cfg, dt, T, cost, gross_tr, grid_kwh, pv_used, act, site_kw,
+                     agg, snap22, offline_info, tr, fleet_size, n_evse)
 
-            # Track queue rank for active vehicles
-            active_now = [v for v in vehicles.values() if v.arrival_time_idx <= t < v.departure_time_idx and v.energy_needed > 0.1]
-            active_now.sort(key=lambda v: (not v.is_priority, -v.atc_score, v.arrival_time_idx))
-            for rank_idx, v in enumerate(active_now):
-                queue_pos_timeline[v.id][t] = rank_idx + 1
 
-            # Detect preemption / starvation for Gantt charts
-            pri_arr = [v for v in arriving if v.day_ahead_priority]
-            for v in vehicles.values():
-                if not v.day_ahead_priority and v.arrival_time_idx <= t < v.departure_time_idx:
-                    if v.energy_needed > 0.5 and prev_cmds.get(v.id, 0.0) > 0.5 and cmds.get(v.id, 0.0) < 0.5 and pri_arr:
-                        preemption_events.append({"time": t, "priority_id": pri_arr[0].id, "preempted_id": v.id})
-                if v.day_ahead_priority and v.arrival_time_idx <= t < v.departure_time_idx:
-                    if v.energy_needed > 0.5 and cmds.get(v.id, 0.0) < 0.5:
-                        starvation_events.append({"time": t, "starved_id": v.id})
-            prev_cmds = dict(cmds)
+def summarise(method, vehicles, cfg, dt, T, cost, gross_tr, grid_kwh, pv_used, act, site_kw, agg,
+              snap22, offline_info, tr, fleet_size, n_evse) -> Dict:
+    vs = list(vehicles.values())
+    P = [v for v in vs if v.roster_priority]
+    N = [v for v in vs if not v.roster_priority]
 
-            gross_t = float(sum(cmds.values()))
-            gross_load_trace[t] = gross_t
-            pv_t = max(0.0, pv_now)
-            bess_t = max(0.0, float(bess_full[t]))
-            pv_used_t = min(gross_t, pv_t)
-            rem_load = gross_t - pv_used_t
-            bess_used_t = min(rem_load, bess_t)
-            net_grid_t = max(0.0, rem_load - bess_used_t)
-            net_grid_trace[t] = net_grid_t
+    def frac(group, key=lambda v: v.energy_delivered):
+        den = sum(v.e_session_kwh for v in group)
+        return 100.0 * sum(min(key(v), v.e_session_kwh) for v in group) / den if den > 0 else 100.0
 
-            pv_used_kwh += pv_used_t * dt
-            bess_used_kwh += bess_used_t * dt
-            step_c = net_grid_t * tou_full[t] * dt
-            cum_cost += step_c
-            cost_history.append(cum_cost)
-            if tou_full[t] >= 0.30:
-                cost_by_tier["peak"] += step_c
-            elif tou_full[t] >= 0.20:
-                cost_by_tier["shoulder"] += step_c
-            else:
-                cost_by_tier["off_peak"] += step_c
-
-        if isinstance(sched, AQPSScheduler):
-            preemptions = sched.preemption_count
-            safe_releases = sched.safe_release_count
-            escalations = sched.escalation_count
-            extra_op_cost = sched.extra_operator_cost
-        else:
-            preemptions = len(preemption_events)
-
-    # Compute comprehensive fulfillment & service metrics ( evaluated against day-ahead priority cohort for consistent benchmarking )
-    def calc_fulfill(is_p: bool) -> float:
-        cohort = [v for v in vehicles.values() if v.day_ahead_priority == is_p]
-        req = sum(v.target_energy_kwh for v in cohort)
-        deliv = sum(min(v.energy_delivered, v.target_energy_kwh) for v in cohort)
-        return (deliv / req * 100.0) if req > 0 else 100.0
-
-    # Mission sufficiency: share of priority vehicles departing with >= next_trip + return + reserve (within 0.5 kWh tolerance)
-    pri_cohort = [v for v in vehicles.values() if v.day_ahead_priority]
-    mission_ok = sum(
-        1 for v in pri_cohort
-        if (v.eod_soc_kwh + v.energy_delivered) >= (v.next_trip_kwh + v.return_kwh + v.reserve_kwh - 0.5)
-    )
-    mission_suff_pct = (mission_ok / len(pri_cohort) * 100.0) if pri_cohort else 100.0
-
-    # Jain's fairness index across non-priority vehicles
-    np_cohort = [v for v in vehicles.values() if not v.day_ahead_priority and v.target_energy_kwh > 0]
-    if np_cohort:
-        ratios = np.array([min(1.0, v.energy_delivered / v.target_energy_kwh) for v in np_cohort])
-        denom = len(ratios) * np.sum(ratios ** 2)
-        jain_np = float((np.sum(ratios) ** 2) / denom) if denom > 0 else 1.0
-    else:
-        jain_np = 1.0
-
-    peak_kw = float(np.max(gross_load_trace)) if len(gross_load_trace) > 0 else 0.0
-    mean_kw = float(np.mean(gross_load_trace)) if len(gross_load_trace) > 0 else 0.0
-    load_factor = (mean_kw / peak_kw) if peak_kw > 0 else 0.0
-    transformer_loading_pct = (peak_kw / site_limit_kw * 100.0) if site_limit_kw > 0 else 0.0
-    total_pv_avail_kwh = float(np.sum(np.maximum(0.0, pv_act_full)) * dt)
-    pv_self_cons_pct = min(100.0, (pv_used_kwh / total_pv_avail_kwh * 100.0)) if total_pv_avail_kwh > 0 else 0.0
-
-    mean_solve_ms = float(np.mean(solve_times_ms)) if solve_times_ms else 0.0
-    p95_solve_ms = float(np.percentile(solve_times_ms, 95)) if solve_times_ms else 0.0
-
-    return {
-        "method": method,
-        "fleet_size": fleet_size,
-        "n_evse": num_chargers,
-        "scenario_key": scenario_key,
-        "scenario_label": scenario_label,
-        "priority_fulfillment_pct": round(calc_fulfill(True), 2),
-        "mission_sufficiency_pct": round(mission_suff_pct, 2),
-        "non_priority_fulfillment_pct": round(calc_fulfill(False), 2),
-        "non_priority_jain_fairness": round(jain_np, 3),
-        "total_cost": round(cum_cost, 2),
-        "extra_operator_cost": round(extra_op_cost, 2),
-        "cost_off_peak": round(cost_by_tier["off_peak"], 2),
-        "cost_shoulder": round(cost_by_tier["shoulder"], 2),
-        "cost_peak": round(cost_by_tier["peak"], 2),
-        "pv_used_kwh": round(pv_used_kwh, 2),
-        "bess_used_kwh": round(bess_used_kwh, 2),
-        "pv_self_consumption_pct": round(pv_self_cons_pct, 2),
-        "preemptions": int(preemptions),
-        "safe_releases": int(safe_releases),
-        "escalations": int(escalations),
-        "l2_solve_count": int(total_l2_solves),
-        "total_qp_solves": int(total_all_solves),
-        "solve_time_mean_ms": round(mean_solve_ms, 3),
-        "solve_time_p95_ms": round(p95_solve_ms, 3),
-        "peak_demand_kw": round(peak_kw, 2),
-        "load_factor": round(load_factor, 3),
-        "transformer_loading_pct": round(transformer_loading_pct, 2),
-        "cumulative_cost_trace": [round(x, 2) for x in cost_history],
-        "ev_power_timeline": {k: v.tolist() for k, v in ev_power_timeline.items()},
-        "queue_pos_timeline": {k: [None if np.isnan(x) else int(x) for x in v] for k, v in queue_pos_timeline.items()},
-        "preemption_events": preemption_events,
-        "starvation_events": starvation_events,
+    e_p = sum(v.energy_delivered for v in P)
+    e_n = sum(v.energy_delivered for v in N)
+    e_tot = e_p + e_n
+    tot_cost = sum(cost.values())
+    ratios = np.array([min(1.0, v.energy_delivered / v.e_session_kwh) for v in N if v.e_session_kwh > 0])
+    jain = float(ratios.sum() ** 2 / (len(ratios) * (ratios ** 2).sum())) if ratios.size and (ratios ** 2).sum() > 0 else 1.0
+    peak = float(gross_tr.max()) if gross_tr.size else 0.0
+    pv_tot = float(np.sum(np.maximum(act, 0.0)) * dt)
+    l2_ms = np.asarray(agg["l2_ms"]) if agg["l2_ms"] else np.zeros(0)
+    row = {
+        "method": method, "fleet_size": fleet_size, "n_evse": n_evse, "site_kw": site_kw,
+        "n_priority": len(P), "n_nonpriority": len(N),
+        "mission_sufficiency_pct": round(100.0 * sum(v.energy_delivered >= v.e_mission_kwh - TOL_MISSION for v in P) / len(P), 3) if P else 100.0,
+        "mission_shortfall_kwh": round(sum(max(0.0, v.e_mission_kwh - v.energy_delivered) for v in P), 3),
+        "priority_session_fulfil_pct": round(frac(P), 3),
+        "nonpriority_fulfil_pct": round(frac(N), 3),
+        "nonpriority_fulfil_22h_pct": round(frac(N, key=lambda v: snap22.get(v.id, 0.0)), 3) if snap22 else None,
+        "nonpriority_jain": round(jain, 4),
+        "energy_priority_kwh": round(e_p, 3), "energy_nonpriority_kwh": round(e_n, 3),
+        "energy_total_kwh": round(e_tot, 3), "grid_import_kwh": round(grid_kwh, 3),
+        "cost_total": round(tot_cost, 4), "unit_cost_per_kwh": round(tot_cost / e_tot, 5) if e_tot > 0 else None,
+        "cost_off_peak": round(cost["off_peak"], 4), "cost_shoulder": round(cost["shoulder"], 4),
+        "cost_peak": round(cost["peak"], 4),
+        "pv_used_kwh": round(pv_used, 3), "pv_self_consumption_pct": round(100.0 * pv_used / pv_tot, 3) if pv_tot > 0 else None,
+        "peak_kw": round(peak, 3), "load_factor": round(float(gross_tr.mean() / peak), 4) if peak > 0 else None,
+        "transformer_loading_pct": round(100.0 * peak / site_kw, 3),
+        "preemptions": agg["pre"], "safe_releases": agg["sr"], "rotations": agg["rot"],
+        "escalation_episodes": agg["esc"], "previews": len(agg["previews"]),
+        "extra_operator_cost": round(agg["extra_cost"], 4),
+        "l0_solves": agg["l0"], "l2_solves": agg["l2"], "preview_solves": agg["prev"],
+        "total_solves": agg["l0"] + agg["l2"] + agg["prev"],
+        "l2_solve_ms_mean": round(float(l2_ms.mean()), 3) if l2_ms.size else 0.0,
+        "l2_solve_ms_p95": round(float(np.percentile(l2_ms, 95)), 3) if l2_ms.size else 0.0,
+        "compute_ms_total": round(agg["all_ms"], 2), "event_steps": agg["events"],
+        "soft_solves": agg["soft"], "eq10_infeasible_first": agg["infeas"],
+        "committed_infeasible": agg["commit_inf"], "nonoptimal_status": agg["nonopt"],
+        "solver": cfg["optimizer"]["solver"],
     }
+    if offline_info is not None:
+        row.update({"offline_status": offline_info["status"], "offline_integer": offline_info["integer"],
+                    "offline_soft": offline_info["soft"], "offline_mip_gap": offline_info.get("mip_gap"),
+                    "offline_objective": offline_info["objective"]})
+    per_ev = [{"id": v.id, "roster_priority": v.roster_priority, "day_ahead_priority": v.day_ahead_priority,
+               "arrival_idx": v.arrival_idx, "departure_idx": v.departure_idx, "e_session": v.e_session_kwh,
+               "e_mission": v.e_mission_kwh, "delivered": round(v.energy_delivered, 4),
+               "preempted": v.preempted_count, "rotated": v.rotated_count, "safe_released": v.safe_released}
+              for v in vs]
+    return {"summary": row, "per_ev": per_ev, "previews": agg["previews"], "trace": tr}
 
 
-def run_e1_main():
-    print("\n=== Running E1: Main Benchmark (8 Methods x S1-S3 x 2 Fleets) ===")
-    exp_id = "E1_main"
-    write_manifest(exp_id, {"methods": METHODS_ALL, "fleets": [45, 90], "scenarios": [s[0] for s in SCENARIOS]}, [42])
-    rows = []
-
-    for fleet_size in [45, 90]:
-        with open(f"simulation_data_{fleet_size}EVs.json") as f:
-            data = json.load(f)
-        env = data["environment"]
-        for sc_key, sc_label in SCENARIOS:
-            ev_data = data["scenarios"][sc_key]
-            # First run Offline-Optimal to record upper bound cost
-            oracle_res = None
-            sc_rows = []
-            for m in METHODS_ALL:
-                raw_path = os.path.join("results", exp_id, "raw", f"{m}_{sc_key}_{fleet_size}EVs.json")
-                if os.path.exists(raw_path):
-                    with open(raw_path) as rf:
-                        res = json.load(rf)
-                else:
-                    res = run_single_simulation(m, fleet_size, sc_key, sc_label, ev_data, env)
-                    with open(raw_path, "w") as rf:
-                        json.dump(res, rf)
-                if m == "Offline-Optimal":
-                    oracle_res = res
-                sc_rows.append(res)
-
-            oracle_cost = oracle_res["total_cost"] if oracle_res else 1.0
-            for r in sc_rows:
-                r["gap_to_offline_opt_pct"] = round(
-                    ((r["total_cost"] - oracle_cost) / max(1.0, oracle_cost)) * 100.0, 2
-                )
-                rows.append({k: v for k, v in r.items() if not isinstance(v, (list, dict))})
-
-    df = pd.DataFrame(rows)
-    df.to_csv(os.path.join("results", exp_id, "summary", "e1_master_table.csv"), index=False)
-    print(f"[E1] Saved summary to results/{exp_id}/summary/e1_master_table.csv")
+# ============================================================================ bookkeeping
+def git_info():
+    try:
+        h = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT).decode().strip()
+        dirty = bool(subprocess.check_output(["git", "status", "--porcelain", "--", "src", "run_all_experiments.py",
+                                              "config", "data_generator.py"], cwd=ROOT).decode().strip())
+        return h, dirty
+    except Exception:
+        return "unknown", True
 
 
-def run_e2_case_studies():
-    print("\n=== Running E2: Scripted Operator Injection Case Studies ===")
-    exp_id = "E2_case_studies"
-    with open(os.path.join("data", "operator_injections.json")) as f:
-        injections = json.load(f)
-    write_manifest(exp_id, {"cases": list(injections.keys()), "fleet": 90, "scenario": "S3_HighPriority"}, [200])
-
-    with open("simulation_data_90EVs.json") as f:
-        data = json.load(f)
-    env = data["environment"]
-    ev_data = data["scenarios"]["S3_HighPriority"]
-
-    rows = []
-    for case_name, inj in injections.items():
-        for m in ["LLF", "AQPS-static", "AQPS-RT-ET"]:
-            raw_path = os.path.join("results", exp_id, "raw", f"{case_name}_{m}.json")
-            if os.path.exists(raw_path):
-                with open(raw_path) as rf:
-                    res = json.load(rf)
-            else:
-                res = run_single_simulation(
-                    m, 90, "S3_HighPriority", f"S2 ({case_name})", ev_data, env,
-                    injections_by_step={int(inj["time_idx"]): inj}
-                )
-                res["case_name"] = case_name
-                res["injection_time_idx"] = int(inj["time_idx"])
-                res["injection_type"] = inj["type"]
-                with open(raw_path, "w") as rf:
-                    json.dump(res, rf)
-            rows.append({k: v for k, v in res.items() if not isinstance(v, (list, dict))})
-
-    pd.DataFrame(rows).to_csv(os.path.join("results", exp_id, "summary", "e2_case_studies.csv"), index=False)
-    print(f"[E2] Saved summary to results/{exp_id}/summary/e2_case_studies.csv")
+def versions():
+    out = {"python": sys.version.split()[0], "numpy": np.__version__, "pandas": pd.__version__}
+    try:
+        import cvxpy
+        out["cvxpy"] = cvxpy.__version__
+    except Exception:
+        pass
+    try:
+        import mosek
+        out["mosek"] = ".".join(map(str, mosek.Env.getversion()))
+    except Exception:
+        out["mosek"] = None
+    return out
 
 
-def run_e3_monte_carlo():
-    print("\n=== Running E3: Random-Disruption Monte Carlo (30 Seeds x S2 Contention) ===")
-    exp_id = "E3_monte_carlo"
-    seeds = list(range(3000, 3030))
-    write_manifest(exp_id, {"n_runs": 30, "methods": ["LLF", "EDF", "MPC-only", "AQPS-static", "AQPS-RT-ET"]}, seeds)
+def file_sha(path):
+    if not os.path.exists(path):
+        return None
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
 
-    with open("simulation_data_90EVs.json") as f:
-        base_data = json.load(f)
-    env = base_data["environment"]
-    base_evs = base_data["scenarios"]["S3_HighPriority"]
 
-    rows = []
+def write_manifest(exp_dir: str, exp: str, cfg: Dict, extra: Dict):
+    h, dirty = git_info()
+    m = {
+        "experiment": exp, "git_commit": h, "git_dirty": dirty,
+        "config_sha256": hashlib.sha256(json.dumps(cfg, sort_keys=True).encode()).hexdigest(),
+        "config": cfg, "run_started": datetime.now().isoformat(timespec="seconds"),
+        "machine": {"os": platform.platform(), "processor": platform.processor(), "machine": platform.machine(),
+                    "cpu_count": os.cpu_count()},
+        "versions": versions(),
+        "inputs": {"pv_days_sha256": file_sha(PV_DAYS_PATH), "injections_sha256": file_sha(INJ_PATH),
+                   "aemo_checksums_sha256": file_sha(os.path.join(ROOT, "data", "aemo_raw", "checksums.csv")),
+                   **{f"fleet_{s}_sha256": file_sha(os.path.join(ROOT, f"simulation_data_{s}EVs.json")) for s in (45, 90, 180)}},
+        **extra,
+    }
+    os.makedirs(exp_dir, exist_ok=True)
+    with open(os.path.join(exp_dir, "manifest.json"), "w") as f:
+        json.dump(m, f, indent=2, default=str)
+
+
+class Runner:
+    def __init__(self, out_root: str, cfg: Dict):
+        self.out_root, self.cfg = out_root, cfg
+
+    def run(self, exp: str, run_id: str, fn, meta: Dict, trace: bool = False):
+        raw_dir = os.path.join(self.out_root, exp, "raw")
+        os.makedirs(raw_dir, exist_ok=True)
+        path = os.path.join(raw_dir, f"{run_id}.json.gz")
+        if os.path.exists(path):
+            with gzip.open(path, "rt") as f:
+                return json.load(f)
+        t0 = time.perf_counter()
+        res = fn()
+        res["summary"].update(meta)
+        res["summary"]["run_id"] = run_id
+        res["summary"]["wall_s"] = round(time.perf_counter() - t0, 2)
+        if not trace:
+            res["trace"] = None
+        with gzip.open(path + ".part", "wt") as f:
+            json.dump(res, f, default=float)
+        os.replace(path + ".part", path)
+        print(f"  [{exp}] {run_id}: {res['summary']['wall_s']} s")
+        return res
+
+    def write_summary(self, exp: str, results: List[Dict]):
+        d = os.path.join(self.out_root, exp, "summary")
+        os.makedirs(d, exist_ok=True)
+        pd.DataFrame([r["summary"] for r in results]).to_csv(os.path.join(d, "runs.csv"), index=False)
+
+
+# ============================================================================ experiments
+def fleet_ctx(size, cfg, n_evse=None):
+    data = load_fleet(size)
+    infra = cfg["fleets"][size] if size in cfg["fleets"] else cfg["fleets"][str(size)]
+    return data, (n_evse or infra["n_evse"]), infra["site_kw"]
+
+
+def e1(R: Runner, cfg, sel):
+    c = cfg["experiments"]["E1"]
+    out = []
+    for size in sel.get("fleets") or c["fleets"]:
+        data, M, site = fleet_ctx(size, cfg)
+        for sc in sel.get("scenarios") or c["scenarios"]:
+            for m in sel.get("methods") or c["methods"]:
+                rid = f"{m}_{sc}_{size}EV"
+                out.append(R.run("E1", rid, lambda m=m, sc=sc: simulate(
+                    m, data["scenarios"][sc], data["environment"], size, M, site, cfg, trace=True),
+                    {"scenario": sc}, trace=True))
+    R.write_summary("E1", out)
+
+
+def load_injections():
+    if not os.path.exists(INJ_PATH):
+        sys.exit(f"{INJ_PATH} missing — run data_generator.py first")
+    with open(INJ_PATH) as f:
+        return json.load(f)
+
+
+def e2(R: Runner, cfg, sel):
+    c = cfg["experiments"]["E2"]
+    data, M, site = fleet_ctx(c["fleet"], cfg)
+    out = []
+    for case, inj in load_injections().items():
+        for m in sel.get("methods") or c["methods"]:
+            rid = f"{m}_{case}"
+            out.append(R.run("E2", rid, lambda m=m, inj=inj: simulate(
+                m, data["scenarios"][c["scenario"]], data["environment"], c["fleet"], M, site, cfg,
+                injections={inj["time_idx"]: [inj]}, trace=True),
+                {"scenario": c["scenario"], "case": case, "injection_type": inj["type"],
+                 "injection_t": inj["time_idx"]}, trace=True))
+    R.write_summary("E2", out)
+    prev = []
+    for r in out:
+        for p in r.get("previews") or []:
+            for o in p["options"]:
+                prev.append({"run_id": r["summary"]["run_id"], "case": r["summary"]["case"], "t": p["t"],
+                             "trigger": p["trigger"], "chosen": p["chosen"], "option": o["option"],
+                             "horizon_cost": o["horizon_cost"], "cost_delta": o["cost_delta"],
+                             "soft": o["soft"], "n_priority": len(o["priority_ids"])})
+    pd.DataFrame(prev).to_csv(os.path.join(R.out_root, "E2", "summary", "previews.csv"), index=False)
+
+
+def disrupt(records: List[Dict], seed: int, dcfg: Dict, T: int):
+    rng = np.random.default_rng(seed)
+    recs, inj = [], {}
+    for r in records:
+        e = dict(r)
+        sh = int(rng.integers(-dcfg["arrival_shift_steps"], dcfg["arrival_shift_steps"] + 1))
+        e["arrival_idx"] = int(np.clip(e["arrival_idx"] + sh, 0, T - 9))
+        e["departure_idx"] = int(np.clip(e["departure_idx"] + sh, e["arrival_idx"] + 8, T - 1))
+        e["evening_return_idx"] = int(np.clip(e["evening_return_idx"] + sh, e["departure_idx"], T - 1))
+        s = float(rng.uniform(*dcfg["energy_scale"]))
+        e["e_session_kwh"] = round(e["e_session_kwh"] * s, 3)
+        e["e_mission_kwh"] = round(min(e["e_session_kwh"], e["e_mission_kwh"] * s), 3)
+        if e["priority"] == "Low" and not e.get("overnight") and rng.random() < dcfg["promotion_prob"]:
+            hi = max(e["arrival_idx"] + 1, e["departure_idx"] - 4)
+            tp = int(rng.integers(e["arrival_idx"], hi))
+            inj.setdefault(tp, []).append({"type": "promotion", "id": e["id"], "new_w": 3.8})
+        recs.append(e)
+    return recs, inj
+
+
+def e3(R: Runner, cfg, sel):
+    c = cfg["experiments"]["E3"]
+    data, M, site = fleet_ctx(c["fleet"], cfg)
+    s0, s1 = c["seeds"]
+    seeds = list(range(s0, s1 + 1))[: sel.get("n_seeds") or None]
+    out = []
     for seed in seeds:
-        rng = np.random.default_rng(seed)
-        # Perturb arrival times (+/- 4 steps = +/- 1h), energy demand (+/- 15%), and 10% random priority promotion
-        pert_evs = []
-        for ev in base_evs:
-            ec = dict(ev)
-            arr_shift = int(rng.integers(-4, 5))
-            ec["arrival_idx"] = int(np.clip(ec["arrival_idx"] + arr_shift, 0, 86))
-            ec["departure_idx"] = int(np.clip(ec["departure_idx"] + arr_shift, ec["arrival_idx"] + 8, 95))
-            ec["req_energy"] = round(float(ec["req_energy"] * rng.uniform(0.88, 1.15)), 2)
-            if ec["priority"] == "Low" and rng.random() < 0.08:
-                ec["priority"] = "High"
-                ec["trip_criticality_w"] = 3.8
-            pert_evs.append(ec)
-
-        for m in ["LLF", "EDF", "MPC-only", "AQPS-static", "AQPS-RT-ET"]:
-            raw_path = os.path.join("results", exp_id, "raw", f"mc_{m}_seed{seed}.json")
-            if os.path.exists(raw_path):
-                with open(raw_path) as rf:
-                    res = json.load(rf)
-            else:
-                res = run_single_simulation(m, 90, "S3_HighPriority", "S2_MC", pert_evs, env)
-                res_slim = {k: v for k, v in res.items() if not isinstance(v, (list, dict))}
-                res_slim["seed"] = seed
-                with open(raw_path, "w") as rf:
-                    json.dump(res_slim, rf)
-                res = res_slim
-            rows.append(res)
-
-    df_raw = pd.DataFrame(rows)
-    df_raw.to_csv(os.path.join("results", exp_id, "summary", "e3_mc_all_runs.csv"), index=False)
-
-    # Aggregate mean, std, and 95% CI
-    agg_rows = []
-    for m, grp in df_raw.groupby("method"):
-        n = len(grp)
-        for col in ["priority_fulfillment_pct", "mission_sufficiency_pct", "non_priority_fulfillment_pct", "total_cost"]:
-            mean_v = float(grp[col].mean())
-            std_v = float(grp[col].std(ddof=1))
-            ci95 = 1.96 * std_v / np.sqrt(max(1, n))
-            agg_rows.append({"method": m, "metric": col, "mean": round(mean_v, 2), "std": round(std_v, 2), "ci95": round(ci95, 2)})
-    pd.DataFrame(agg_rows).to_csv(os.path.join("results", exp_id, "summary", "e3_mc_summary.csv"), index=False)
-    print(f"[E3] Saved 30-run Monte Carlo summary to results/{exp_id}/summary/e3_mc_summary.csv")
+        recs, inj = disrupt(data["scenarios"][c["scenario"]], seed, c["disruption"], data["environment"]["n_steps"])
+        for m in sel.get("methods") or c["methods"]:
+            out.append(R.run("E3", f"{m}_seed{seed}", lambda m=m, recs=recs, inj=inj: simulate(
+                m, recs, data["environment"], c["fleet"], M, site, cfg, injections=inj),
+                {"scenario": c["scenario"], "seed": seed, "n_promotions": sum(len(v) for v in inj.values())}))
+    R.write_summary("E3", out)
 
 
-def run_e4_aemo_pv():
-    print("\n=== Running E4: Real AEMO VIC1 PV Forecast vs. Actual Across 6 Days ===")
-    exp_id = "E4_aemo_pv"
-    if not os.path.exists(AEMO_PATH):
-        build_aemo_vic1_dataset()
-    with open(AEMO_PATH) as f:
-        aemo = json.load(f)
-
-    write_manifest(exp_id, {"days": [d["date"] for d in aemo["days"]], "fleets": [45, 90]}, [101, 102, 103, 104, 105, 106])
-    rows = []
-
-    for fleet_size in [45, 90]:
-        with open(f"simulation_data_{fleet_size}EVs.json") as f:
-            data = json.load(f)
-        ev_data = data["scenarios"]["S3_HighPriority"]
-        base_env = data["environment"]
-
-        for day in aemo["days"]:
-            env_day = dict(base_env)
-            env_day["pv_forecast"] = day["pv_forecast_kw"]
-            pv_act = day["pv_actual_kw"]
-
-            for m in ["LLF", "EDF", "MPC-only", "Offline-Optimal", "AQPS-static", "AQPS-RT-ET"]:
-                raw_path = os.path.join("results", exp_id, "raw", f"pv_{day['date']}_{m}_{fleet_size}EVs.json")
-                if os.path.exists(raw_path):
-                    with open(raw_path) as rf:
-                        res = json.load(rf)
-                else:
-                    res = run_single_simulation(
-                        m, fleet_size, "S3_HighPriority", f"S2_{day['date']}", ev_data, env_day,
-                        pv_actual_override=pv_act
-                    )
-                    res_slim = {k: v for k, v in res.items() if not isinstance(v, (list, dict))}
-                    res_slim.update({
-                        "date": day["date"],
-                        "season": day["season"],
-                        "sky_condition": day["sky_condition"],
-                        "error_tier": day["error_tier"],
-                        "pv_mae_kw": day["mae_kw"],
-                        "pv_nmae_pct": day["nmae_pct"],
-                    })
-                    with open(raw_path, "w") as rf:
-                        json.dump(res_slim, rf)
-                    res = res_slim
-                rows.append(res)
-
-    df = pd.DataFrame(rows)
-    df.to_csv(os.path.join("results", exp_id, "summary", "e4_aemo_pv_results.csv"), index=False)
-    print(f"[E4] Saved AEMO VIC1 PV evaluation to results/{exp_id}/summary/e4_aemo_pv_results.csv")
+def e4(R: Runner, cfg, sel):
+    c = cfg["experiments"]["E4"]
+    with open(PV_DAYS_PATH) as f:
+        pvd = json.load(f)
+    out = []
+    for size in sel.get("fleets") or c["fleets"]:
+        data, M, site = fleet_ctx(size, cfg)
+        for day in pvd["days"]:
+            for m in sel.get("methods") or c["methods"]:
+                rid = f"{m}_{size}EV_{day['date']}"
+                out.append(R.run("E4", rid, lambda m=m, day=day: simulate(
+                    m, data["scenarios"][c["scenario"]], data["environment"], size, M, site, cfg,
+                    pv_fc=day["pv_forecast_kw"], pv_act=day["pv_actual_kw"]),
+                    {"scenario": c["scenario"], "pv_date": day["date"], "pv_percentile": day["percentile"],
+                     "pv_nmae_pct": day["nmae_pct"]}))
+    R.write_summary("E4", out)
 
 
-def run_e5_event_triggered_and_scalability():
-    print("\n=== Running E5 & E5b: Event-Triggered vs Every-Step & Scalability/Ratio Sweep ===")
-    exp_id = "E5_scalability"
-    write_manifest(exp_id, {"tmax_sweep": [1, 2, 4, 8], "fleets": [45, 90, 180], "ratios": ["2:1", "3:1", "4:1"]}, [42])
-
-    # Part A: T_max & PV trigger threshold sweep on 90 EVs S2
-    with open("simulation_data_90EVs.json") as f:
-        data90 = json.load(f)
-    env90 = data90["environment"]
-    ev90 = data90["scenarios"]["S3_HighPriority"]
-
-    et_rows = []
-    for tmax in [1, 2, 4, 6, 8]:
-        mode = "AQPS-RT" if tmax == 1 else "AQPS-RT-ET"
-        res = run_single_simulation(
-            mode, 90, "S3_HighPriority", f"Tmax_{tmax}", ev90, env90,
-            config_overrides={"event_trigger": {"t_max_steps": tmax}}
-        )
-        slim = {k: v for k, v in res.items() if not isinstance(v, (list, dict))}
-        slim["t_max_steps"] = tmax
-        slim["t_max_minutes"] = tmax * 15
-        et_rows.append(slim)
-    pd.DataFrame(et_rows).to_csv(os.path.join("results", exp_id, "summary", "e5a_event_trigger_comparison.csv"), index=False)
-
-    # Part B: Scalability across Fleet Sizes (45, 90, 180 EVs) and EV:EVSE Ratios (2:1, 3:1, 4:1)
-    scale_rows = []
-    for fleet_size in [45, 90, 180]:
-        with open(f"simulation_data_{fleet_size}EVs.json") as f:
-            fdata = json.load(f)
-        fenv = fdata["environment"]
-        fevs = fdata["scenarios"]["S3_HighPriority"]
-        base_kw = INFRA[fleet_size]["transformer_kW"]
-
-        for ratio_label, ratio_val in [("2:1", 2), ("3:1", 3), ("4:1", 4)]:
-            n_evse = max(4, int(round(fleet_size / ratio_val)))
-            for m in ["LLF", "EDF", "AQPS-RT", "AQPS-RT-ET"]:
-                raw_path = os.path.join("results", exp_id, "raw", f"scale_{fleet_size}EV_{ratio_label.replace(':','to')}_{m}.json")
-                if os.path.exists(raw_path):
-                    with open(raw_path) as rf:
-                        slim = json.load(rf)
-                else:
-                    res = run_single_simulation(
-                        m, fleet_size, "S3_HighPriority", f"S2_{ratio_label}", fevs, fenv,
-                        n_evse=n_evse, transformer_kw=base_kw
-                    )
-                    slim = {k: v for k, v in res.items() if not isinstance(v, (list, dict))}
-                    slim["ev_to_evse_ratio"] = ratio_label
-                    with open(raw_path, "w") as rf:
-                        json.dump(slim, rf)
-                scale_rows.append(slim)
-
-    pd.DataFrame(scale_rows).to_csv(os.path.join("results", exp_id, "summary", "e5b_scalability_ratios.csv"), index=False)
-    print(f"[E5] Saved Event-Triggered & Scalability results to results/{exp_id}/summary/")
+def e5(R: Runner, cfg, sel):
+    c = cfg["experiments"]["E5"]
+    out = []
+    # (a) event-triggered vs every-step: all scenarios x fleets
+    for size in sel.get("fleets") or c["fleets"]:
+        data, M, site = fleet_ctx(size, cfg)
+        for sc in sel.get("scenarios") or c["scenarios"]:
+            for m in c["methods"]:
+                out.append(R.run("E5", f"a_{m}_{sc}_{size}EV", lambda m=m, sc=sc: simulate(
+                    m, data["scenarios"][sc], data["environment"], size, M, site, cfg),
+                    {"part": "a_et_vs_every_step", "scenario": sc}))
+    # (b) T_max sweep, 90-EV S2
+    data, M, site = fleet_ctx(90, cfg)
+    for tm in c["t_max_sweep"]:
+        cfg2 = deep_update(cfg, {"event_trigger": {"t_max_steps": tm}})
+        out.append(R.run("E5", f"b_tmax{tm}", lambda cfg2=cfg2: simulate(
+            "AQPS-RT-ET", data["scenarios"]["S2_Contention"], data["environment"], 90, M, site, cfg2),
+            {"part": "b_tmax_sweep", "scenario": "S2_Contention", "t_max_steps": tm}))
+    # (c) scalability / EV:EVSE ratio sweep, S2
+    sc_cfg = c["scalability"]
+    for size in sc_cfg["fleets"]:
+        data, _, site = fleet_ctx(size, cfg)
+        for ratio in sc_cfg["ratios"]:
+            M = int(round(size / ratio))
+            for m in sc_cfg["methods"]:
+                out.append(R.run("E5", f"c_{m}_{size}EV_r{ratio}", lambda m=m, M=M, data=data, size=size, site=site: simulate(
+                    m, data["scenarios"]["S2_Contention"], data["environment"], size, M, site, cfg),
+                    {"part": "c_scalability", "scenario": "S2_Contention", "ratio": ratio}))
+    R.write_summary("E5", out)
 
 
-def run_e6_sensitivity():
-    print("\n=== Running E6: Sensitivity Analysis (alpha2, alpha3, ATC k, reserve r) ===")
-    exp_id = "E6_sensitivity"
-    write_manifest(exp_id, {"sweeps": ["alpha2", "alpha3", "k_atc", "reserve_r"]}, [42])
-
-    with open("simulation_data_90EVs.json") as f:
-        data90 = json.load(f)
-    env90 = data90["environment"]
-    ev90 = data90["scenarios"]["S3_HighPriority"]
-
-    sens_rows = []
-    # 1. Sweep alpha2
-    for a2 in [10.0, 25.0, 50.0, 100.0, 250.0, 500.0]:
-        res = run_single_simulation(
-            "AQPS-RT-ET", 90, "S3_HighPriority", "S2", ev90, env90,
-            config_overrides={"optimizer": {"alpha2": a2}}
-        )
-        sens_rows.append({
-            "param_name": "alpha2", "param_val": a2,
-            "priority_fulfillment_pct": res["priority_fulfillment_pct"],
-            "non_priority_fulfillment_pct": res["non_priority_fulfillment_pct"],
-            "total_cost": res["total_cost"],
-        })
-
-    # 2. Sweep alpha3
-    for a3 in [0.0005, 0.001, 0.005, 0.01, 0.05, 0.1]:
-        res = run_single_simulation(
-            "AQPS-RT-ET", 90, "S3_HighPriority", "S2", ev90, env90,
-            config_overrides={"optimizer": {"alpha3": a3}}
-        )
-        sens_rows.append({
-            "param_name": "alpha3", "param_val": a3,
-            "priority_fulfillment_pct": res["priority_fulfillment_pct"],
-            "non_priority_fulfillment_pct": res["non_priority_fulfillment_pct"],
-            "total_cost": res["total_cost"],
-        })
-
-    # 3. Sweep ATC lookahead k
-    for katc in [0.5, 1.0, 1.5, 2.0, 3.0]:
-        res = run_single_simulation(
-            "AQPS-RT-ET", 90, "S3_HighPriority", "S2", ev90, env90,
-            config_overrides={"optimizer": {"k_atc": katc}}
-        )
-        sens_rows.append({
-            "param_name": "k_atc", "param_val": katc,
-            "priority_fulfillment_pct": res["priority_fulfillment_pct"],
-            "non_priority_fulfillment_pct": res["non_priority_fulfillment_pct"],
-            "total_cost": res["total_cost"],
-        })
-
-    # 4. Sweep reserve margin r (kWh)
-    for r_kwh in [2.0, 4.0, 6.8, 10.0, 14.0]:
-        res = run_single_simulation(
-            "AQPS-RT-ET", 90, "S3_HighPriority", "S2", ev90, env90,
-            config_overrides={"optimizer": {"reserve_override_kwh": r_kwh}}
-        )
-        sens_rows.append({
-            "param_name": "reserve_kwh", "param_val": r_kwh,
-            "priority_fulfillment_pct": res["priority_fulfillment_pct"],
-            "non_priority_fulfillment_pct": res["non_priority_fulfillment_pct"],
-            "total_cost": res["total_cost"],
-        })
-
-    pd.DataFrame(sens_rows).to_csv(os.path.join("results", exp_id, "summary", "e6_sensitivity.csv"), index=False)
-    print(f"[E6] Saved sensitivity analysis to results/{exp_id}/summary/e6_sensitivity.csv")
+def e6(R: Runner, cfg, sel):
+    c = cfg["experiments"]["E6"]
+    data, M, site = fleet_ctx(c["fleet"], cfg)
+    recs, env = data["scenarios"][c["scenario"]], data["environment"]
+    out = []
+    sweeps = [("alpha3", "optimizer", "alpha3"), ("alpha2", "optimizer", "alpha2"),
+              ("pv_dev_threshold_kw", "event_trigger", "pv_dev_threshold_kw"),
+              ("preempt_slack_h", "layer1", "preempt_slack_h")]
+    for key, sect, field in sweeps:
+        for val in c[key]:
+            cfg2 = deep_update(cfg, {sect: {field: val}})
+            out.append(R.run("E6", f"{key}_{val}", lambda cfg2=cfg2: simulate(
+                c["method"], recs, env, c["fleet"], M, site, cfg2), {"param": key, "value": val}))
+    M_k = int(round(c["fleet"] / c["k_atc_ratio"]))
+    for val in c["k_atc"]:
+        cfg2 = deep_update(cfg, {"layer0": {"k_atc": val}})
+        out.append(R.run("E6", f"k_atc_{val}", lambda cfg2=cfg2: simulate(
+            c["method"], recs, env, c["fleet"], M_k, site, cfg2),
+            {"param": "k_atc", "value": val, "n_evse_override": M_k}))
+    for val in c["reserve_frac"]:
+        out.append(R.run("E6", f"reserve_{val}", lambda val=val: simulate(
+            c["method"], recs, env, c["fleet"], M, site, cfg, reserve_frac=val),
+            {"param": "reserve_frac", "value": val}))
+    R.write_summary("E6", out)
 
 
-def run_e7_overloaded_priority():
-    print("\n=== Running E7: Overloaded Priority Stress Test & Conditional Guarantee ===")
-    exp_id = "E7_overloaded"
-    write_manifest(exp_id, {"priority_shares": [0.30, 0.50, 0.65, 0.80, 0.90]}, [42])
-
-    with open("simulation_data_45EVs.json") as f:
-        data45 = json.load(f)
-    env45 = data45["environment"]
-    base_evs = data45["scenarios"]["S3_HighPriority"]
-
-    rows = []
-    for p_share in [0.30, 0.50, 0.65, 0.80, 0.90]:
-        n_pri = int(round(len(base_evs) * p_share))
-        mod_evs = []
-        for idx, ev in enumerate(base_evs):
-            ec = dict(ev)
-            is_p = idx < n_pri
-            ec["priority"] = "High" if is_p else "Low"
-            ec["trip_criticality_w"] = 3.8 if is_p else 0.8
-            mod_evs.append(ec)
-
-        for m in ["LLF", "AQPS-static", "AQPS-RT-ET"]:
-            res = run_single_simulation(m, 45, "S3_HighPriority", f"Pri_{int(p_share*100)}pct", mod_evs, env45)
-            slim = {k: v for k, v in res.items() if not isinstance(v, (list, dict))}
-            slim["priority_share_pct"] = int(p_share * 100)
-            rows.append(slim)
-
-    pd.DataFrame(rows).to_csv(os.path.join("results", exp_id, "summary", "e7_overloaded_priority.csv"), index=False)
-    print(f"[E7] Saved overloaded priority analysis to results/{exp_id}/summary/e7_overloaded_priority.csv")
+def e7(R: Runner, cfg, sel):
+    c = cfg["experiments"]["E7"]
+    data, M, site = fleet_ctx(c["fleet"], cfg)
+    base = data["scenarios"][c["scenario"]]
+    noon = int((12 - cfg["time"]["start_hour"]) * 60 / cfg["time"]["step_minutes"])
+    daytime = [r for r in base if not r.get("overnight")]
+    order = sorted(daytime, key=lambda r: (abs(r["arrival_idx"] - noon), r["id"]))
+    out = []
+    for share in c["shares"]:
+        n_pri = int(round(len(base) * share))
+        pri_ids = {r["id"] for r in order[:n_pri]}
+        recs = []
+        for r in base:
+            e = dict(r)
+            is_p = e["id"] in pri_ids
+            e["priority"] = "High" if is_p else "Low"
+            e["trip_criticality_w"] = 3.8 if is_p else 0.8
+            recs.append(e)
+        for m in sel.get("methods") or c["methods"]:
+            out.append(R.run("E7", f"{m}_share{share}", lambda m=m, recs=recs: simulate(
+                m, recs, data["environment"], c["fleet"], M, site, cfg),
+                {"scenario": c["scenario"], "priority_share": share, "n_priority_assigned": n_pri}))
+    R.write_summary("E7", out)
 
 
-def write_results_map_doc():
-    os.makedirs("docs", exist_ok=True)
-    md = """# AQPS Revision Results Map (`docs/results_map.md`)
-
-| Experiment ID | Manuscript Section | Figure / Table | Summary CSV Source | Post-Processing Function |
-| :--- | :--- | :--- | :--- | :--- |
-| **E1** (Main 8 Methods x S1-S3 x 2 Fleets) | §4.3 Main Results | Table 3 (Master Table), Fig. 3 (Fulfillment), Figs. 4-5 (Cumulative Cost), Figs. 6-7 (Per-EV Gantt), Fig. 8 (Cost Breakdown) | `results/E1_main/summary/e1_master_table.csv` | `generate_all_figures.py` |
-| **E2** (Scripted Operator Injections) | §4.4 Real-Time Queue Case Studies | Fig. 9 (Queue Trajectory with Injection Markers), Table 4 (Operator Impact Preview) | `results/E2_case_studies/summary/e2_case_studies.csv` | `generate_all_figures.py` |
-| **E3** (Random-Disruption Monte Carlo, 30 runs) | §4.5 Disruption Monte Carlo | Fig. 10 (Monte Carlo Fulfillment & Cost Box/CI Plot) | `results/E3_monte_carlo/summary/e3_mc_summary.csv` | `generate_all_figures.py` |
-| **E4** (Real AEMO VIC1 PV Forecast vs Actual) | §4.6 PV Forecast Uncertainty | Fig. 11 (AEMO VIC1 Profiles & Error Impact), Table 5 | `results/E4_aemo_pv/summary/e4_aemo_pv_results.csv` | `generate_all_figures.py` |
-| **E5 / E5b** (Event-Triggered vs Every-Step & Scalability) | §4.7 Computational Efficiency & Scalability | Fig. 12 (Solve Count & Time Reduction), Table 6 (Scalability 45/90/180 EVs & Ratios 2:1-4:1) | `results/E5_scalability/summary/e5a_event_trigger_comparison.csv`, `e5b_scalability_ratios.csv` | `generate_all_figures.py` |
-| **E6** (Hyperparameter Sensitivity) | §4.8 Sensitivity Analysis | Fig. 13 (4-Panel Sensitivity Plateau: $\alpha_2, \alpha_3, k, r$) | `results/E6_sensitivity/summary/e6_sensitivity.csv` | `generate_all_figures.py` |
-| **E7** (Overloaded Priority & Escalation) | §3.5 & §4.8 Feasibility Condition | Table 7 / Fig. 14 (Overloaded Priority Fulfilment, Safe Releases & Escalations) | `results/E7_overloaded/summary/e7_overloaded_priority.csv` | `generate_all_figures.py` |
-"""
-    with open(os.path.join("docs", "results_map.md"), "w", encoding="utf-8") as f:
-        f.write(md)
-    print("[Docs] Wrote docs/results_map.md")
+EXPS = {"E1": e1, "E2": e2, "E3": e3, "E4": e4, "E5": e5, "E6": e6, "E7": e7}
 
 
 def main():
-    t_start = time.perf_counter()
-    if not os.path.exists("simulation_data_45EVs.json") or not os.path.exists("simulation_data_180EVs.json"):
-        generate_scenarios()
-    write_results_map_doc()
-    run_e1_main()
-    run_e2_case_studies()
-    run_e3_monte_carlo()
-    run_e4_aemo_pv()
-    run_e5_event_triggered_and_scalability()
-    run_e6_sensitivity()
-    run_e7_overloaded_priority()
-    elapsed = time.perf_counter() - t_start
-    print(f"\nAll Experiments E1-E7 completed in {elapsed:.1f}s!")
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--exp", nargs="+", default=["all"])
+    ap.add_argument("--fleet", nargs="+", type=int)
+    ap.add_argument("--scenario", nargs="+")
+    ap.add_argument("--methods", nargs="+")
+    ap.add_argument("--n-seeds", type=int)
+    ap.add_argument("--solver")
+    ap.add_argument("--out", default="results")
+    ap.add_argument("--smoke", action="store_true", help="E1, 45 EVs, S2 only, all methods -> results_smoke/")
+    args = ap.parse_args()
+
+    cfg = load_cfg()
+    cfg["fleets"] = {int(k): v for k, v in cfg["fleets"].items()}
+    if args.solver:
+        cfg["optimizer"]["solver"] = args.solver.upper()
+    exps = list(EXPS) if args.exp == ["all"] else args.exp
+    out_root = args.out
+    sel = {"fleets": args.fleet, "scenarios": args.scenario, "methods": args.methods, "n_seeds": args.n_seeds}
+    if args.smoke:
+        out_root = "results_smoke"
+        exps = exps if args.exp != ["all"] else ["E1"]
+        sel = {"fleets": args.fleet or [45], "scenarios": args.scenario or ["S2_Contention"],
+               "methods": args.methods, "n_seeds": args.n_seeds or 1}
+    R = Runner(out_root, cfg)
+    for exp in exps:
+        print(f"=== {exp} ===")
+        write_manifest(os.path.join(out_root, exp), exp, cfg, {"selection": sel})
+        EXPS[exp](R, cfg, sel)
 
 
 if __name__ == "__main__":
