@@ -1,16 +1,10 @@
 """
 WP4 — Operator Impact-Preview Loop (Grounded in Parasuraman, Sheridan & Wickens, 2000:
 Level of Automation "executes recommended option provisionally unless vetoed").
-
-Generates 3 options via what-if QP solves whenever an event affects a priority vehicle
-or changes cost by more than threshold `cost_delta_threshold`:
-  - Option A (Recommended): Apply Layer 0/1 optimal priority set & safe release.
-  - Option B (Keep Previous / Business Continuity): Force-keep all urgent vehicles at extra cost / partial share.
-  - Option C (Downgrade Lowest-ATC Vehicle): Relax lowest-urgency priority vehicle to non-priority.
 """
 
-from dataclasses import dataclass, field
-from typing import List, Dict, Optional
+from dataclasses import dataclass
+from typing import List, Dict
 import numpy as np
 from .data_structures import Vehicle
 from .tou_optimization import TOUOptimizer
@@ -63,28 +57,24 @@ class OperatorImpactPreview:
         baseline_cost: float,
         operator_script_choice: str = "recommended",
     ) -> ImpactPreviewRecord:
-        """
-        Runs 3 what-if QP solves to populate the operator impact preview.
-        """
         options: List[PreviewOption] = []
         total_ms = 0.0
 
-        current_pri_ids = [v.id for v in admitted_vehicles if v.is_priority]
+        # Snapshot Layer 0/1 recommended priority set BEFORE running what-if options
+        recommended_pri_ids = {v.id for v in admitted_vehicles if v.is_priority}
 
-        # Helper to run a what-if QP solve for a candidate priority set
         def run_what_if(opt_id: str, desc: str, pri_set: set) -> PreviewOption:
             nonlocal total_ms
-            opt_evs = []
-            for v in admitted_vehicles:
-                opt_evs.append(
-                    {
-                        "id": v.id,
-                        "energy_needed": v.energy_needed,
-                        "max_power": v.max_charging_power_kw,
-                        "dep_time_idx": v.departure_time_idx,
-                        "is_priority": (v.id in pri_set),
-                    }
-                )
+            opt_evs = [
+                {
+                    "id": v.id,
+                    "energy_needed": v.energy_needed,
+                    "max_power": v.max_charging_power_kw,
+                    "dep_time_idx": v.departure_time_idx,
+                    "is_priority": (v.id in pri_set),
+                }
+                for v in admitted_vehicles
+            ]
             res = self.optimizer.solve(
                 current_time_idx=time_idx,
                 horizon=horizon,
@@ -109,17 +99,17 @@ class OperatorImpactPreview:
                 solve_time_ms=res.solve_time_ms,
             )
 
-        # Option 1: Recommended (Layer 0/1 feasible priority set)
+        # Option 1: Recommended (Layer-0 feasible priority set)
         opt_rec = run_what_if(
             "recommended",
-            "Recommended: Layer-0 feasible priority set with safe release",
-            set(current_pri_ids),
+            "Recommended: Layer-0 feasible priority set with safe release & Q_act rotation",
+            recommended_pri_ids,
         )
         options.append(opt_rec)
 
-        # Option 2: Keep previous / promote highest-urgency escalated or NP vehicle (Business Continuity)
-        promote_set = set(current_pri_ids)
-        np_cands = [v for v in admitted_vehicles if not v.is_priority]
+        # Option 2: Keep all urgent (promote highest-ATC non-priority vehicle)
+        promote_set = set(recommended_pri_ids)
+        np_cands = [v for v in admitted_vehicles if v.id not in recommended_pri_ids]
         if np_cands:
             np_cands.sort(key=lambda v: v.atc_score, reverse=True)
             promote_set.add(np_cands[0].id)
@@ -130,10 +120,10 @@ class OperatorImpactPreview:
         )
         options.append(opt_keep)
 
-        # Option 3: Cost-saving downgrade of lowest-ATC priority vehicle
-        downgrade_set = set(current_pri_ids)
-        pri_cands = [v for v in admitted_vehicles if v.is_priority]
-        if pri_cands:
+        # Option 3: Downgrade lowest-ATC priority vehicle
+        downgrade_set = set(recommended_pri_ids)
+        pri_cands = [v for v in admitted_vehicles if v.id in recommended_pri_ids]
+        if len(pri_cands) > 1:
             pri_cands.sort(key=lambda v: v.atc_score)
             downgrade_set.discard(pri_cands[0].id)
         opt_down = run_what_if(
@@ -143,20 +133,18 @@ class OperatorImpactPreview:
         )
         options.append(opt_down)
 
-        # Select according to scripted operator choice (defaults to 'recommended' provisional execution)
         chosen = opt_rec
         for o in options:
             if o.option_id == operator_script_choice:
                 chosen = o
                 break
 
-        # Apply chosen priority flags to admitted vehicles
         chosen_set = set(chosen.priority_ids)
         for v in admitted_vehicles:
             v.is_priority = (v.id in chosen_set)
 
         extra_cost = max(0.0, chosen.estimated_horizon_cost - opt_rec.estimated_horizon_cost)
-        affected = sorted(list(set(escalated_ids) | (set(current_pri_ids) ^ chosen_set)))
+        affected = sorted(list(set(escalated_ids) | (recommended_pri_ids ^ chosen_set)))
 
         rec = ImpactPreviewRecord(
             time_idx=time_idx,

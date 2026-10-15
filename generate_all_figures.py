@@ -1,3 +1,4 @@
+# Save directly as: generate_all_figures.py
 """
 WP7 — Publication-Quality Figures & EPSR LaTeX Table Generator.
 
@@ -7,6 +8,7 @@ Style specifications:
 - Legends placed cleanly below plots
 - Option A for Fig. 3 (Grouped direct 0-100% Priority and Non-Priority Fulfillment bars,
   fixing the stacked-vs-label mismatch and updating titles to 16 / 35 EVSEs).
+- Regenerates Figs. 6 & 7 (Per-vehicle schedules / Preemption Gantt for S2 & S3).
 """
 
 import os
@@ -16,6 +18,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.lines import Line2D
+from collections import defaultdict
 
 FIG_DIR = "figs_epsr"
 TAB_DIR = "tables_epsr"
@@ -39,7 +42,6 @@ METHOD_COLORS = {
     "AQPS-RT-ET": "#0077BB",
     "AQPS-RT": "#33BBEE",
     "AQPS-static": "#009988",
-    "AQPS-v1": "#CCBB44",
     "MPC-only": "#EE3377",
     "EDF": "#AA3377",
     "LLF": "#EE7733",
@@ -70,14 +72,21 @@ def plot_fig2_architecture():
     ax.axis("off")
 
     boxes = [
-        (0.2, 2.5, 2.1, 1.3, "#E8F4F8", "#0077BB", "Layer 0: Priority Selection\n• Session $E_i^{req}$ (kWh)\n• ATC Score $\pi_i(t)$\n• QP Bisection Check"),
-        (2.8, 2.5, 2.2, 1.3, "#E8F8F5", "#009988", "Layer 1: Queue & Safe Release\n• Laxity NP Preemption\n• 3-Part Safe Release (kWh)\n• Escalation Trigger"),
-        (5.5, 2.5, 2.2, 1.3, "#FEF9E7", "#EE7733", "Layer 2: Event-Triggered MPC\n• Receding-Horizon QP\n• Plan Cache $X^*$ ($T_{max}$)\n• Gross Limit $\sum x_{i,t} \leq P_{site}^{max}$"),
-        (8.1, 2.5, 1.7, 1.3, "#F4ECF7", "#AA3377", "Depot EVSEs ($M$)\n• Pilot Signals $x_{i,k}$\n• 20 kW PV + BESS\n• 3-Tier TOU Tariff"),
-        (2.8, 0.35, 4.9, 1.25, "#FDEDEC", "#CC3311", "Human-in-the-Loop Operator Impact Preview (FMS Integration)\n• 3 What-If QP Options (Recommended / Keep All / Downgrade)\n• Provisional Execution Unless Vetoed (Parasuraman et al., 2000)"),
+        (0.2, 2.5, 2.1, 1.3, "#E8F4F8", "#0077BB",
+         "Layer 0: Priority Selection\n• Session $E_i^{req}$ (kWh)\n• ATC Score $\\pi_i(t)$\n• QP Bisection Check"),
+        (2.8, 2.5, 2.2, 1.3, "#E8F8F5", "#009988",
+         "Layer 1: Multi-Queue ($Q_k^{act}, Q_k^p, Q_k^n$)\n• Laxity NP Preemption\n• Safe Release & $Q_k^{act}$ FIFO Rotation"),
+        (5.5, 2.5, 2.2, 1.3, "#FEF9E7", "#EE7733",
+         "Layer 2: Event-Triggered MPC\n• Receding-Horizon QP\n• Plan Cache $X^*$ ($T_{max}$)\n• Gross Limit $\\sum x_{i,t} \\leq P_{site}^{max}$"),
+        (8.1, 2.5, 1.7, 1.3, "#F4ECF7", "#AA3377",
+         "Depot EVSEs ($M$)\n• Pilot Signals $x_{i,k}$\n• 20 kW PV + BESS\n• 3-Tier TOU Tariff"),
+        (2.8, 0.35, 4.9, 1.25, "#FDEDEC", "#CC3311",
+         "Human-in-the-Loop Operator Impact Preview (FMS Integration)\n• 3 What-If QP Options (Recommended / Keep All / Downgrade)\n• Provisional Execution Unless Vetoed (Parasuraman et al., 2000)"),
     ]
     for x, y, w, h, fc, ec, text in boxes:
-        rect = mpatches.FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0.08", facecolor=fc, edgecolor=ec, linewidth=1.2)
+        rect = mpatches.FancyBboxPatch(
+            (x, y), w, h, boxstyle="round,pad=0.08", facecolor=fc, edgecolor=ec, linewidth=1.2
+        )
         ax.add_patch(rect)
         ax.text(x + w / 2, y + h / 2, text, ha="center", va="center", fontsize=7, color="#222222")
 
@@ -86,12 +95,31 @@ def plot_fig2_architecture():
     ax.annotate("", xy=(5.5, 3.15), xytext=(5.0, 3.15), arrowprops=arrow_kw)
     ax.annotate("", xy=(8.1, 3.15), xytext=(7.7, 3.15), arrowprops=arrow_kw)
 
-    # Feedback & operator arrows
-    ax.annotate("Shortfall $>0$ Feedback", xy=(1.25, 2.5), xytext=(6.2, 2.5),
-                arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=-0.28", lw=0.9, ls="--", color="#0077BB"),
-                fontsize=6.5, color="#0077BB", ha="center")
-    ax.annotate("Escalation / Preview", xy=(4.2, 1.6), xytext=(4.2, 2.5), arrowprops=dict(arrowstyle="->", lw=1.0, color="#CC3311"), fontsize=6.5, color="#CC3311")
-    ax.annotate("Operator Choice", xy=(6.4, 2.5), xytext=(6.4, 1.6), arrowprops=dict(arrowstyle="->", lw=1.0, color="#CC3311"), fontsize=6.5, color="#CC3311")
+    ax.annotate(
+        "Shortfall $>0$ Feedback",
+        xy=(1.25, 2.5),
+        xytext=(6.2, 2.5),
+        arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=-0.28", lw=0.9, ls="--", color="#0077BB"),
+        fontsize=6.5,
+        color="#0077BB",
+        ha="center",
+    )
+    ax.annotate(
+        "Escalation / Preview",
+        xy=(4.2, 1.6),
+        xytext=(4.2, 2.5),
+        arrowprops=dict(arrowstyle="->", lw=1.0, color="#CC3311"),
+        fontsize=6.5,
+        color="#CC3311",
+    )
+    ax.annotate(
+        "Operator Choice",
+        xy=(6.4, 2.5),
+        xytext=(6.4, 1.6),
+        arrowprops=dict(arrowstyle="->", lw=1.0, color="#CC3311"),
+        fontsize=6.5,
+        color="#CC3311",
+    )
 
     plt.tight_layout()
     plt.savefig(os.path.join(FIG_DIR, "fig2_system_architecture.png"), dpi=300)
@@ -104,7 +132,7 @@ def plot_fig3_fulfillment_grouped(df_e1: pd.DataFrame):
     Direct 0-100% Priority and Non-Priority Demand Fulfillment (%) across key methods.
     """
     fig, axes = plt.subplots(2, 2, figsize=(7.0, 4.6), sharey=True)
-    methods_show = ["AQPS-RT-ET", "AQPS-v1", "MPC-only", "EDF", "LLF"]
+    methods_show = ["AQPS-RT-ET", "AQPS-static", "MPC-only", "EDF", "LLF"]
     width = 0.15
 
     for col_idx, (fleet, evse) in enumerate([(45, 16), (90, 35)]):
@@ -123,10 +151,20 @@ def plot_fig3_fulfillment_grouped(df_e1: pd.DataFrame):
                     row = sub[(sub["scenario_label"] == sc) & (sub["method"] == m)]
                     vals.append(float(row[metric_col].iloc[0]) if len(row) > 0 else 0.0)
                 offset = (m_idx - len(methods_show) / 2 + 0.5) * width
-                bars = ax.bar(x + offset, vals, width, label=m, color=METHOD_COLORS[m], edgecolor="white", linewidth=0.3)
+                bars = ax.bar(
+                    x + offset, vals, width, label=m, color=METHOD_COLORS[m], edgecolor="white", linewidth=0.3
+                )
                 if m in ["AQPS-RT-ET", "LLF"]:
                     for b, v in zip(bars, vals):
-                        ax.text(b.get_x() + b.get_width() / 2, v + 1.5, f"{v:.0f}%", ha="center", va="bottom", fontsize=5.5, fontweight="bold")
+                        ax.text(
+                            b.get_x() + b.get_width() / 2,
+                            v + 1.5,
+                            f"{v:.0f}%",
+                            ha="center",
+                            va="bottom",
+                            fontsize=5.5,
+                            fontweight="bold",
+                        )
 
             if row_idx == 0:
                 ax.set_title(f"{fleet} EVs ({evse} EVSEs)", fontweight="bold")
@@ -159,7 +197,14 @@ def plot_figs4_5_cumulative_cost():
                     with open(p) as f:
                         r = json.load(f)
                     hours = np.arange(len(r["cumulative_cost_trace"])) * 0.25 + 6.0
-                    ax.plot(hours, r["cumulative_cost_trace"], ls=ls, color=sc_colors[sc_key], label=f"{m} ({sc_label})", alpha=0.9 if ls == "-" else 0.7)
+                    ax.plot(
+                        hours,
+                        r["cumulative_cost_trace"],
+                        ls=ls,
+                        color=sc_colors[sc_key],
+                        label=f"{m} ({sc_label})",
+                        alpha=0.9 if ls == "-" else 0.7,
+                    )
 
         ax.set_xlabel("Time of Day (Hours from 06:00)")
         ax.set_ylabel("Cumulative Cost ($)")
@@ -173,10 +218,111 @@ def plot_figs4_5_cumulative_cost():
         plt.close()
 
 
+def plot_figs6_7_preemption_gantt():
+    """Figs. 6 & 7: Per-vehicle scheduling Gantt comparison (AQPS-RT-ET vs LLF) for S2 & S3 (90 EVs)."""
+    with open("simulation_data_90EVs.json") as f:
+        data90 = json.load(f)
+
+    for sc_key, safe_tag, title_tag in [
+        ("S3_HighPriority", "S2", "S2 (50% Contention)"),
+        ("S6_PeakStress", "S3", "S3 (50% Peak Stress)"),
+    ]:
+        p_aqps = os.path.join("results", "E1_main", "raw", f"AQPS-RT-ET_{sc_key}_90EVs.json")
+        p_llf = os.path.join("results", "E1_main", "raw", f"LLF_{sc_key}_90EVs.json")
+        if not (os.path.exists(p_aqps) and os.path.exists(p_llf)):
+            continue
+        with open(p_aqps) as fa, open(p_llf) as fl:
+            res_a = json.load(fa)
+            res_l = json.load(fl)
+
+        ev_list = data90["scenarios"][sc_key]
+        ev_info = {
+            ev["id"]: {
+                "arrival": int(ev["arrival_idx"]),
+                "departure": int(ev["departure_idx"]),
+                "is_priority": (ev["priority"] == "High"),
+            }
+            for ev in ev_list
+        }
+
+        # Pick 1 preempted NP EV and 2 starved Priority EVs
+        np_cands = [e["preempted_id"] for e in res_a.get("preemption_events", []) if e["preempted_id"] in ev_info]
+        p_cands = [e["starved_id"] for e in res_l.get("starvation_events", []) if e["starved_id"] in ev_info]
+        selected = []
+        for vid in np_cands:
+            if vid not in selected:
+                selected.append(vid)
+                break
+        for vid in p_cands:
+            if vid not in selected and len(selected) < 3:
+                selected.append(vid)
+        if len(selected) < 3:
+            for vid, inf in ev_info.items():
+                if inf["is_priority"] and vid not in selected:
+                    selected.append(vid)
+                    if len(selected) == 3:
+                        break
+
+        fig, ax = plt.subplots(figsize=(3.5, 3.6))
+        GROUP = 2.2
+        ytick_pos, ytick_lab = [], []
+        t_min = max(0, min(ev_info[vid]["arrival"] for vid in selected) - 2)
+        t_max = min(96, max(ev_info[vid]["departure"] for vid in selected) + 2)
+
+        for i, vid in enumerate(selected):
+            inf = ev_info[vid]
+            arr, dep, is_p = inf["arrival"], inf["departure"], inf["is_priority"]
+            y_a = i * GROUP
+            y_l = i * GROUP + 0.85
+            tag = "P" if is_p else "NP"
+            short_id = vid.replace("EV_", "")
+            ytick_pos.extend([y_a, y_l])
+            ytick_lab.extend([f"{short_id} [{tag}]\nAQPS", f"{short_id} [{tag}]\nLLF"])
+
+            for y_row, tl_dict in [(y_a, res_a["ev_power_timeline"]), (y_l, res_l["ev_power_timeline"])]:
+                ax.barh(
+                    y_row,
+                    (dep - arr) * 0.25,
+                    left=6.0 + arr * 0.25,
+                    height=0.6,
+                    color="#DDDDDD",
+                    edgecolor="none",
+                    zorder=1,
+                )
+                tl = tl_dict.get(vid, [0.0] * 96)
+                c_bar = "#0077BB" if is_p else "#33BBEE"
+                for t in range(arr, min(dep, len(tl))):
+                    if tl[t] > 0.5:
+                        ax.barh(y_row, 0.25, left=6.0 + t * 0.25, height=0.44, color=c_bar, edgecolor="none", zorder=2)
+                    elif (y_row == y_l and is_p) or (y_row == y_a and not is_p and t > arr):
+                        ax.plot(6.0 + (t + 0.5) * 0.25, y_row, marker="v", color="#CC3311", markersize=3.5, zorder=3)
+
+        ax.set_yticks(ytick_pos)
+        ax.set_yticklabels(ytick_lab, fontsize=6.5)
+        ax.set_xlim(6.0 + t_min * 0.25, 6.0 + t_max * 0.25)
+        ax.invert_yaxis()
+        ax.set_xlabel("Time of Day (Hours)")
+        ax.set_title(f"Schedule Comparison — {title_tag}, 90 EVs", fontweight="bold", fontsize=8.5)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.xaxis.grid(True, alpha=0.2)
+
+        legend_el = [
+            mpatches.Patch(facecolor="#DDDDDD", label="Connected"),
+            mpatches.Patch(facecolor="#0077BB", label="Priority Charging"),
+            mpatches.Patch(facecolor="#33BBEE", label="Non-Priority Charging"),
+            Line2D([0], [0], marker="v", color="w", markerfacecolor="#CC3311", markersize=5, label="Preempt / Delay"),
+        ]
+        ax.legend(handles=legend_el, fontsize=6, loc="upper center", bbox_to_anchor=(0.5, -0.18), ncol=2, frameon=False)
+        plt.tight_layout()
+        plt.savefig(os.path.join(FIG_DIR, f"fig_preemption_gantt_{safe_tag}_90EVs.png"), dpi=300)
+        plt.close()
+
+
 def plot_fig8_cost_breakdown(df_e1: pd.DataFrame):
-    """New Fig. 8: Stacked Cost Breakdown by TOU Tier (Off-Peak / Shoulder / Peak) & PV Self-Consumption."""
+    """Fig. 8: Stacked Cost Breakdown by TOU Tier (Off-Peak / Shoulder / Peak)."""
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.0, 2.8), sharey=False)
-    methods = ["AQPS-RT-ET", "AQPS-v1", "MPC-only", "EDF", "LLF"]
+    methods = ["AQPS-RT-ET", "AQPS-static", "MPC-only", "EDF", "LLF"]
 
     for ax, fleet, evse in [(ax1, 45, 16), (ax2, 90, 35)]:
         sub = df_e1[(df_e1["fleet_size"] == fleet) & (df_e1["scenario_key"] == "S3_HighPriority")]
@@ -205,7 +351,7 @@ def plot_fig8_cost_breakdown(df_e1: pd.DataFrame):
 
 
 def plot_fig9_queue_position_injection():
-    """New Key Novelty Figure: Queue Position & Priority Promotion Trajectory with Operator Injection Marker."""
+    """Fig. 9: Queue Position & Priority Promotion Trajectory with Operator Injection Marker."""
     raw_p = os.path.join("results", "E2_case_studies", "raw", "case_1_breakdown_AQPS-RT-ET.json")
     if not os.path.exists(raw_p):
         return
@@ -247,7 +393,7 @@ def plot_fig9_queue_position_injection():
 def plot_fig10_monte_carlo(df_mc: pd.DataFrame):
     """Fig. 10: 30-Run Random Disruption Monte Carlo (Mean +/- 95% CI)."""
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.0, 2.7))
-    methods = ["AQPS-RT-ET", "AQPS-static", "AQPS-v1", "MPC-only", "EDF", "LLF"]
+    methods = ["AQPS-RT-ET", "AQPS-static", "AQPS-static", "MPC-only", "EDF", "LLF"]
     x = np.arange(len(methods))
 
     for ax, metric, ylabel, title in [
@@ -277,7 +423,6 @@ def plot_fig11_aemo_pv(df_pv: pd.DataFrame):
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.0, 2.7))
     hours = np.arange(96) * 0.25 + 6.0
-    # Show Clear vs Partly Cloudy vs Overcast representative profiles
     for idx, color in [(0, "#009988"), (2, "#0077BB"), (5, "#CC3311")]:
         d = aemo["days"][idx]
         ax1.plot(hours, d["pv_forecast_kw"], ls="--", color=color, alpha=0.75)
@@ -292,7 +437,7 @@ def plot_fig11_aemo_pv(df_pv: pd.DataFrame):
     ax1.spines["right"].set_visible(False)
 
     sub90 = df_pv[df_pv["fleet_size"] == 90]
-    for m in ["AQPS-RT-ET", "AQPS-v1", "MPC-only", "LLF"]:
+    for m in ["AQPS-RT-ET", "AQPS-static", "MPC-only", "LLF"]:
         m_df = sub90[sub90["method"] == m].sort_values("pv_nmae_pct")
         ax2.plot(m_df["pv_nmae_pct"], m_df["total_cost"], marker="o", color=METHOD_COLORS[m], label=m)
 
@@ -313,7 +458,10 @@ def plot_fig12_event_triggered(df_et: pd.DataFrame):
     """Fig. 12: Event-Triggered vs Every-Step MPC Solve Counts & Priority Fulfillment."""
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.0, 2.6))
     x = np.arange(len(df_et))
-    labels = [f"$T_{{max}}={m}$m\n({'Every-Step' if s==1 else 'Event-Trig'})" for s, m in zip(df_et["t_max_steps"], df_et["t_max_minutes"])]
+    labels = [
+        f"$T_{{max}}={int(m)}$m\n({'Every-Step' if int(s)==1 else 'Event-Trig'})"
+        for s, m in zip(df_et["t_max_steps"], df_et["t_max_minutes"])
+    ]
 
     ax1.bar(x, df_et["l2_solve_count"], width=0.5, color="#0077BB", label="Layer-2 QP Solves")
     for i, v in enumerate(df_et["l2_solve_count"]):
@@ -331,7 +479,7 @@ def plot_fig12_event_triggered(df_et: pd.DataFrame):
     ax2_r.plot(x, df_et["total_cost"], marker="^", ls="--", color="#EE7733", label="Total Cost ($)")
     ax2.set_xticks(x)
     ax2.set_xticklabels(labels, fontsize=6.5)
-    ax2.set_ylim(90, 102)
+    ax2.set_ylim(85, 103)
     ax2.set_ylabel("Priority Fulfillment (%)", color="#009988")
     ax2_r.set_ylabel("Total Cost ($)", color="#EE7733")
     ax2.set_title("(b) Schedule Optimality Preservation", fontweight="bold")
@@ -346,10 +494,10 @@ def plot_fig13_sensitivity(df_sens: pd.DataFrame):
     """Fig. 13: 4-Panel Sensitivity Analysis (alpha2, alpha3, ATC k, reserve r)."""
     fig, axes = plt.subplots(2, 2, figsize=(7.0, 4.2))
     specs = [
-        ("alpha2", "$\alpha_2$ (Non-Completion Weight)", axes[0, 0]),
-        ("alpha3", "$\alpha_3$ (Tikhonov Conditioning Weight)", axes[0, 1]),
-        ("k_atc", "ATC Lookahead Parameter $k$", axes[1, 0]),
-        ("reserve_kwh", "Reserve Margin $r$ (kWh)", axes[1, 1]),
+        ("alpha2", r"$\alpha_2$ (Non-Completion Weight)", axes[0, 0]),
+        ("alpha3", r"$\alpha_3$ (Tikhonov Conditioning Weight)", axes[0, 1]),
+        ("k_atc", r"ATC Lookahead Parameter $k$", axes[1, 0]),
+        ("reserve_kwh", r"Reserve Margin $r$ (kWh)", axes[1, 1]),
     ]
     for pname, xlabel, ax in specs:
         sub = df_sens[df_sens["param_name"] == pname].sort_values("param_val")
@@ -360,7 +508,7 @@ def plot_fig13_sensitivity(df_sens: pd.DataFrame):
         ax.set_xticklabels([str(v) for v in sub["param_val"]])
         ax.set_xlabel(xlabel)
         ax.set_ylabel("Fulfillment (%)")
-        ax.set_ylim(40, 105)
+        ax.set_ylim(35, 105)
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
         ax.yaxis.grid(True, alpha=0.2)
@@ -373,50 +521,48 @@ def plot_fig13_sensitivity(df_sens: pd.DataFrame):
 
 
 def export_latex_tables(df_e1: pd.DataFrame, df_scale: pd.DataFrame):
-    """Exports EPSR-ready LaTeX tables for §4."""
-    # Table 3: Master E1 Table (S2 & S3 across 45 and 90 EVs)
+    """Exports EPSR-ready LaTeX tables for Section 4."""
     lines = [
-        "\begin{table*}[htbp]",
-        "\centering",
-        "\caption{Master benchmark comparison across scenarios S1--S3 and fleet sizes (45 EVs / 16 EVSEs and 90 EVs / 35 EVSEs).}",
-        "\label{tab:master_results}",
-        "\footnotesize",
-        "\begin{tabular}{llcccccccc}",
-        "\toprule",
-        "Fleet & Scenario & Method & Pri. Fulfill (\%) & Mission Suff. (\%) & Non-Pri. (\%) & Cost (\$) & Gap to Opt. (\%) & QP Solves & Mean Solve (ms) \\",
-        "\midrule",
+        r"\begin{table*}[htbp]",
+        r"\centering",
+        r"\caption{Master benchmark comparison across scenarios S1--S3 and fleet sizes (45 EVs / 16 EVSEs and 90 EVs / 35 EVSEs).}",
+        r"\label{tab:master_results}",
+        r"\footnotesize",
+        r"\begin{tabular}{llcccccccc}",
+        r"\toprule",
+        r"Fleet & Scenario & Method & Pri. Fulfill (\%) & Mission Suff. (\%) & Non-Pri. (\%) & Cost (\$) & Gap to Opt. (\%) & QP Solves & Mean Solve (ms) \\",
+        r"\midrule",
     ]
     for _, r in df_e1.iterrows():
         lines.append(
             f"{int(r['fleet_size'])} EVs & {r['scenario_label']} & {r['method']} & "
             f"{r['priority_fulfillment_pct']:.1f} & {r['mission_sufficiency_pct']:.1f} & "
             f"{r['non_priority_fulfillment_pct']:.1f} & {r['total_cost']:.1f} & "
-            f"{r['gap_to_offline_opt_pct']:+.1f} & {int(r['l2_solve_count'])} & {r['solve_time_mean_ms']:.2f} \\"
+            f"{r['gap_to_offline_opt_pct']:+.1f} & {int(r['l2_solve_count'])} & {r['solve_time_mean_ms']:.2f} \\\\"
         )
-    lines += ["\bottomrule", "\end{tabular}", "\end{table*}"]
-    with open(os.path.join(TAB_DIR, "tab_master_e1.tex"), "w") as f:
+    lines += [r"\bottomrule", r"\end{tabular}", r"\end{table*}"]
+    with open(os.path.join(TAB_DIR, "tab_master_e1.tex"), "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
-    # Table 6: Scalability & EV:EVSE Ratio Sweep
     lines_s = [
-        "\begin{table}[htbp]",
-        "\centering",
-        "\caption{Scalability across fleet sizes (45, 90, 180 EVs) and EV-to-EVSE congestion ratios (2:1, 3:1, 4:1) under S2 Contention.}",
-        "\label{tab:scalability}",
-        "\footnotesize",
-        "\begin{tabular}{llccccc}",
-        "\toprule",
-        "Fleet & Ratio (EVSEs) & Method & Pri. (\%) & Non-Pri. (\%) & Cost (\$) & Mean Solve (ms) \\",
-        "\midrule",
+        r"\begin{table}[htbp]",
+        r"\centering",
+        r"\caption{Scalability across fleet sizes (45, 90, 180 EVs) and EV-to-EVSE congestion ratios (2:1, 3:1, 4:1) under S2 Contention.}",
+        r"\label{tab:scalability}",
+        r"\footnotesize",
+        r"\begin{tabular}{llccccc}",
+        r"\toprule",
+        r"Fleet & Ratio (EVSEs) & Method & Pri. (\%) & Non-Pri. (\%) & Cost (\$) & Mean Solve (ms) \\",
+        r"\midrule",
     ]
     for _, r in df_scale[df_scale["method"].isin(["AQPS-RT-ET", "EDF", "LLF"])].iterrows():
         lines_s.append(
             f"{int(r['fleet_size'])} & {r['ev_to_evse_ratio']} ({int(r['n_evse'])}) & {r['method']} & "
             f"{r['priority_fulfillment_pct']:.1f} & {r['non_priority_fulfillment_pct']:.1f} & "
-            f"{r['total_cost']:.1f} & {r['solve_time_mean_ms']:.2f} \\"
+            f"{r['total_cost']:.1f} & {r['solve_time_mean_ms']:.2f} \\\\"
         )
-    lines_s += ["\bottomrule", "\end{tabular}", "\end{table}"]
-    with open(os.path.join(TAB_DIR, "tab_scalability_e5b.tex"), "w") as f:
+    lines_s += [r"\bottomrule", r"\end{tabular}", r"\end{table}"]
+    with open(os.path.join(TAB_DIR, "tab_scalability_e5b.tex"), "w", encoding="utf-8") as f:
         f.write("\n".join(lines_s))
 
 
@@ -427,6 +573,7 @@ def main():
     df_e1 = pd.read_csv(os.path.join("results", "E1_main", "summary", "e1_master_table.csv"))
     plot_fig3_fulfillment_grouped(df_e1)
     plot_figs4_5_cumulative_cost()
+    plot_figs6_7_preemption_gantt()
     plot_fig8_cost_breakdown(df_e1)
     plot_fig9_queue_position_injection()
 

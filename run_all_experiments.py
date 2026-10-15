@@ -31,7 +31,6 @@ METHODS_ALL = [
     "EDF",
     "MPC-only",
     "Offline-Optimal",
-    "AQPS-v1",
     "AQPS-static",
     "AQPS-RT",
     "AQPS-RT-ET",
@@ -429,7 +428,7 @@ def run_e2_case_studies():
 
     rows = []
     for case_name, inj in injections.items():
-        for m in ["LLF", "AQPS-v1", "AQPS-RT-ET"]:
+        for m in ["LLF", "AQPS-static", "AQPS-RT-ET"]:
             raw_path = os.path.join("results", exp_id, "raw", f"{case_name}_{m}.json")
             if os.path.exists(raw_path):
                 with open(raw_path) as rf:
@@ -454,7 +453,7 @@ def run_e3_monte_carlo():
     print("\n=== Running E3: Random-Disruption Monte Carlo (30 Seeds x S2 Contention) ===")
     exp_id = "E3_monte_carlo"
     seeds = list(range(3000, 3030))
-    write_manifest(exp_id, {"n_runs": 30, "methods": ["LLF", "EDF", "MPC-only", "AQPS-v1", "AQPS-static", "AQPS-RT-ET"]}, seeds)
+    write_manifest(exp_id, {"n_runs": 30, "methods": ["LLF", "EDF", "MPC-only", "AQPS-static", "AQPS-RT-ET"]}, seeds)
 
     with open("simulation_data_90EVs.json") as f:
         base_data = json.load(f)
@@ -477,7 +476,7 @@ def run_e3_monte_carlo():
                 ec["trip_criticality_w"] = 3.8
             pert_evs.append(ec)
 
-        for m in ["LLF", "EDF", "MPC-only", "AQPS-v1", "AQPS-static", "AQPS-RT-ET"]:
+        for m in ["LLF", "EDF", "MPC-only", "AQPS-static", "AQPS-RT-ET"]:
             raw_path = os.path.join("results", exp_id, "raw", f"mc_{m}_seed{seed}.json")
             if os.path.exists(raw_path):
                 with open(raw_path) as rf:
@@ -529,7 +528,7 @@ def run_e4_aemo_pv():
             env_day["pv_forecast"] = day["pv_forecast_kw"]
             pv_act = day["pv_actual_kw"]
 
-            for m in ["LLF", "EDF", "MPC-only", "Offline-Optimal", "AQPS-v1", "AQPS-RT-ET"]:
+            for m in ["LLF", "EDF", "MPC-only", "Offline-Optimal", "AQPS-static", "AQPS-RT-ET"]:
                 raw_path = os.path.join("results", exp_id, "raw", f"pv_{day['date']}_{m}_{fleet_size}EVs.json")
                 if os.path.exists(raw_path):
                     with open(raw_path) as rf:
@@ -701,7 +700,7 @@ def run_e7_overloaded_priority():
             ec["trip_criticality_w"] = 3.8 if is_p else 0.8
             mod_evs.append(ec)
 
-        for m in ["LLF", "AQPS-v1", "AQPS-RT-ET"]:
+        for m in ["LLF", "AQPS-static", "AQPS-RT-ET"]:
             res = run_single_simulation(m, 45, "S3_HighPriority", f"Pri_{int(p_share*100)}pct", mod_evs, env45)
             slim = {k: v for k, v in res.items() if not isinstance(v, (list, dict))}
             slim["priority_share_pct"] = int(p_share * 100)

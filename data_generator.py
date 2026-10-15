@@ -89,10 +89,8 @@ def generate_scenarios():
         eod_soc_kwh = round(float(rng.uniform(0.12, 0.25) * cap), 2)
         mission_total = eod_soc_kwh + req_e
         return_kwh = round(min(8.0, 0.18 * req_e), 2)
-        next_trip_kwh = round(max(4.0, mission_total - return_kwh - reserve_kwh), 2)
-
-        # Re-align target_energy_kwh so E_i^req = next_trip + return + reserve - eod_soc holds exactly
-        req_e = round(max(5.0, next_trip_kwh + return_kwh + reserve_kwh - eod_soc_kwh), 2)
+        next_trip_kwh = round(max(4.0, 0.76 * req_e + eod_soc_kwh - return_kwh - reserve_kwh), 2)
+        req_e = round(max(8.0, req_e), 2)
 
         w_i = round(float(rng.uniform(2.5, 4.5) if is_priority else rng.uniform(0.5, 1.4)), 2)
         further_trips = round(float(rng.uniform(0.0, 4.0) if is_priority else 0.0), 2)
