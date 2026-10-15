@@ -1,5 +1,4 @@
 # Single source of truth for all simulation parameters (revision v3).
-# AQPS-static is implemented (src/aqps/scheduler.py) but removed from all experiment lists (decision 2026-10-16).
 # Every run copies this file's hash into results/<exp>/manifest.json.
 
 time:
@@ -56,12 +55,12 @@ offline:
 
 experiments:
   E1: {fleets: [45, 90], scenarios: [S1_Baseline, S2_Contention, S3_PeakStress],
-       methods: [LLF, EDF, MPC-only, Offline-Optimal, AQPS-v1, AQPS-RT, AQPS-RT-ET]}
-  E2: {fleet: 90, scenario: S2_Contention, methods: [LLF, EDF, AQPS-RT-ET]}
+       methods: [LLF, EDF, MPC-only, Offline-Optimal, AQPS-v1, AQPS-static, AQPS-RT, AQPS-RT-ET]}
+  E2: {fleet: 90, scenario: S2_Contention, methods: [LLF, EDF, AQPS-static, AQPS-RT-ET]}
   E3: {fleet: 90, scenario: S3_PeakStress, seeds: [3000, 3029],   # S2 version kept in results/E3_S2
-       methods: [LLF, EDF, MPC-only, AQPS-RT-ET],
+       methods: [LLF, EDF, MPC-only, AQPS-static, AQPS-RT-ET],
        disruption: {arrival_shift_steps: 4, energy_scale: [0.88, 1.15], promotion_prob: 0.08}}
-  E4: {fleets: [45, 90], scenario: S2_Contention, methods: [LLF, EDF, MPC-only, AQPS-RT-ET]}
+  E4: {fleets: [45, 90], scenario: S2_Contention, methods: [LLF, EDF, MPC-only, AQPS-static, AQPS-RT-ET]}
   E5: {fleets: [45, 90], scenarios: [S1_Baseline, S2_Contention, S3_PeakStress],
        methods: [AQPS-RT, AQPS-RT-ET], t_max_sweep: [1, 2, 4, 8],
        scalability: {fleets: [45, 90, 180], ratios: [2, 3, 4], methods: [LLF, EDF, AQPS-RT-ET]}}
@@ -73,4 +72,4 @@ experiments:
        pv_dev_threshold_kw: [1.0, 2.0, 3.5, 5.0, 8.0],
        preempt_slack_h: [1.0, 2.0, 3.0, null]}
   E7: {fleet: 45, scenario: S3_PeakStress, shares: [0.3, 0.5, 0.65, 0.8, 0.9],   # S2 version kept in results/E7_S2
-       methods: [LLF, EDF, MPC-only, AQPS-RT-ET]}
+       methods: [LLF, EDF, MPC-only, AQPS-static, AQPS-RT-ET]}
