@@ -40,6 +40,7 @@ PV_DAYS_PATH = os.path.join(ROOT, "data", "aemo_vic1_selected_days.json")
 INJ_PATH = os.path.join(ROOT, "data", "operator_injections.json")
 ONLINE_AQPS = ("AQPS-static", "AQPS-RT", "AQPS-RT-ET")
 TOL_MISSION = 0.1  # kWh
+SITE_TOL_REL = 1e-3  # solver tolerance band on the site limit; larger excess is a hard error
 
 
 # ============================================================================ helpers
@@ -132,7 +133,7 @@ def simulate(method: str, records: List[Dict], env: Dict, fleet_size: int, n_evs
 
     agg = {"l0": 0, "l2": 0, "prev": 0, "l2_ms": [], "all_ms": 0.0, "soft": 0, "infeas": 0,
            "commit_inf": 0, "nonopt": 0, "pre": 0, "sr": 0, "rot": 0, "esc": 0, "extra_cost": 0.0,
-           "previews": [], "events": 0}
+           "previews": [], "events": 0, "site_trims": 0, "site_trim_kw_max": 0.0}
     tr = {"gross": [], "net": [], "power": {}, "connected": [], "priority": [], "reasons": []} if trace else None
     offline_info = None
 
@@ -222,15 +223,20 @@ def simulate(method: str, records: List[Dict], env: Dict, fleet_size: int, n_evs
             cmds = out["commands"]
 
         # apply commands (single place where energy changes, for every method)
-        gross = 0.0
-        for vid, p in cmds.items():
+        for vid in list(cmds):
             v = vehicles[vid]
-            p = max(0.0, min(p, v.p_max_kw, v.session_remaining / dt))
-            v.energy_delivered += p * dt
-            cmds[vid] = p
-            gross += p
-        if gross > site_kw + 1e-6:
-            raise RuntimeError(f"{method}: site limit violated at t={t}: {gross:.2f} kW")
+            cmds[vid] = max(0.0, min(cmds[vid], v.p_max_kw, v.session_remaining / dt))
+        gross = sum(cmds.values())
+        if gross > site_kw * (1.0 + SITE_TOL_REL):
+            raise RuntimeError(f"{method}: site limit violated at t={t}: {gross:.4f} kW > {site_kw} kW")
+        if gross > site_kw:  # solver feasibility tolerance (<= 0.1 %): scale back to the limit
+            agg["site_trims"] += 1
+            agg["site_trim_kw_max"] = max(agg["site_trim_kw_max"], gross - site_kw)
+            for vid in cmds:
+                cmds[vid] *= site_kw / gross
+            gross = site_kw
+        for vid, p in cmds.items():
+            vehicles[vid].energy_delivered += p * dt
         net = max(0.0, gross - act[t] - bess[t])
         cost[tier_of(tou[t], cfg)] += net * tou[t] * dt
         gross_tr[t] = gross
@@ -297,6 +303,7 @@ def summarise(method, vehicles, cfg, dt, T, cost, gross_tr, grid_kwh, pv_used, a
         "compute_ms_total": round(agg["all_ms"], 2), "event_steps": agg["events"],
         "soft_solves": agg["soft"], "eq10_infeasible_first": agg["infeas"],
         "committed_infeasible": agg["commit_inf"], "nonoptimal_status": agg["nonopt"],
+        "site_trims": agg["site_trims"], "site_trim_kw_max": round(agg["site_trim_kw_max"], 6),
         "solver": cfg["optimizer"]["solver"],
     }
     if offline_info is not None:
