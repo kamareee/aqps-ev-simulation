@@ -161,13 +161,15 @@ class OfflineOptimal:
             info["soft"] = True
         info.update(status=status, solve_ms=ms, objective=float(prob.value) if status in OK else float("nan"))
         if integer and status in OK:
-            st = prob.solver_stats
-            extra = getattr(st, "extra_stats", None)
-            info["mip_gap"] = None
-            try:  # MOSEK: relative gap from the task information items
-                import mosek
-                info["mip_gap"] = float(extra.getdouinf(mosek.dinfitem.mio_obj_rel_gap))
-            except Exception:
-                pass
+            # Optimality-gap bound from the continuous relaxation (lower bound on the MIQP optimum):
+            # gap_bound = (obj_MIQP - obj_relax) / |obj_MIQP|; the true MIP gap is <= this value.
+            rprob, _ = self._build(vehicles, tou, pv, bess, integer=False, soft=info["soft"])
+            rstatus, rms = self._solve(rprob, integer=False)
+            info["relax_status"] = rstatus
+            info["relax_objective"] = float(rprob.value) if rstatus in OK else float("nan")
+            if rstatus in OK and abs(info["objective"]) > 0:
+                info["mip_gap"] = max(0.0, (info["objective"] - info["relax_objective"]) / abs(info["objective"]))
+            else:
+                info["mip_gap"] = None
         sched = np.clip(np.asarray(x.value), 0.0, None) if status in OK else np.zeros((len(vehicles), len(tou)))
         return {"schedule": {v.id: sched[i] for i, v in enumerate(vehicles)}, "info": info}

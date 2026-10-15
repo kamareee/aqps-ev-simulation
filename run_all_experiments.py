@@ -308,7 +308,8 @@ def summarise(method, vehicles, cfg, dt, T, cost, gross_tr, grid_kwh, pv_used, a
     }
     if offline_info is not None:
         row.update({"offline_status": offline_info["status"], "offline_integer": offline_info["integer"],
-                    "offline_soft": offline_info["soft"], "offline_mip_gap": offline_info.get("mip_gap"),
+                    "offline_soft": offline_info["soft"], "offline_mip_gap_bound": offline_info.get("mip_gap"),
+                    "offline_relax_objective": offline_info.get("relax_objective"),
                     "offline_objective": offline_info["objective"]})
     per_ev = [{"id": v.id, "roster_priority": v.roster_priority, "day_ahead_priority": v.day_ahead_priority,
                "arrival_idx": v.arrival_idx, "departure_idx": v.departure_idx, "e_session": v.e_session_kwh,
@@ -321,9 +322,11 @@ def summarise(method, vehicles, cfg, dt, T, cost, gross_tr, grid_kwh, pv_used, a
 # ============================================================================ bookkeeping
 def git_info():
     try:
-        h = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT).decode().strip()
+        h = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT,
+                                    stderr=subprocess.DEVNULL).decode().strip()
         dirty = bool(subprocess.check_output(["git", "status", "--porcelain", "--", "src", "run_all_experiments.py",
-                                              "config", "data_generator.py"], cwd=ROOT).decode().strip())
+                                              "config", "data_generator.py"], cwd=ROOT,
+                                             stderr=subprocess.DEVNULL).decode().strip())
         return h, dirty
     except Exception:
         return "unknown", True
@@ -366,7 +369,17 @@ def write_manifest(exp_dir: str, exp: str, cfg: Dict, extra: Dict):
         **extra,
     }
     os.makedirs(exp_dir, exist_ok=True)
-    with open(os.path.join(exp_dir, "manifest.json"), "w") as f:
+    path = os.path.join(exp_dir, "manifest.json")
+    # keep earlier invocations (resumed runs may come from an earlier commit; each run row also
+    # carries its own git_commit in runs.csv)
+    history = []
+    if os.path.exists(path):
+        with open(path) as f:
+            old = json.load(f)
+        history = old.pop("history", [])
+        history.append({k: old.get(k) for k in ("git_commit", "git_dirty", "config_sha256", "run_started", "versions")})
+    m["history"] = history
+    with open(path, "w") as f:
         json.dump(m, f, indent=2, default=str)
 
 
@@ -386,6 +399,7 @@ class Runner:
         res["summary"].update(meta)
         res["summary"]["run_id"] = run_id
         res["summary"]["wall_s"] = round(time.perf_counter() - t0, 2)
+        res["summary"]["git_commit"], res["summary"]["git_dirty"] = git_info()
         if not trace:
             res["trace"] = None
         with gzip.open(path + ".part", "wt") as f:
@@ -481,7 +495,7 @@ def e3(R: Runner, cfg, sel):
     for seed in seeds:
         recs, inj = disrupt(data["scenarios"][c["scenario"]], seed, c["disruption"], data["environment"]["n_steps"])
         for m in sel.get("methods") or c["methods"]:
-            out.append(R.run("E3", f"{m}_seed{seed}", lambda m=m, recs=recs, inj=inj: simulate(
+            out.append(R.run("E3", f"{m}_{c['scenario']}_seed{seed}", lambda m=m, recs=recs, inj=inj: simulate(
                 m, recs, data["environment"], c["fleet"], M, site, cfg, injections=inj),
                 {"scenario": c["scenario"], "seed": seed, "n_promotions": sum(len(v) for v in inj.values())}))
     R.write_summary("E3", out)
@@ -566,9 +580,10 @@ def e7(R: Runner, cfg, sel):
     c = cfg["experiments"]["E7"]
     data, M, site = fleet_ctx(c["fleet"], cfg)
     base = data["scenarios"][c["scenario"]]
-    noon = int((12 - cfg["time"]["start_hour"]) * 60 / cfg["time"]["step_minutes"])
+    # contended cohort: centred on the median arrival of the scenario's own day-ahead priority EVs
+    centre = float(np.median([r["arrival_idx"] for r in base if r["priority"] == "High"]))
     daytime = [r for r in base if not r.get("overnight")]
-    order = sorted(daytime, key=lambda r: (abs(r["arrival_idx"] - noon), r["id"]))
+    order = sorted(daytime, key=lambda r: (abs(r["arrival_idx"] - centre), r["id"]))
     out = []
     for share in c["shares"]:
         n_pri = int(round(len(base) * share))
@@ -581,9 +596,10 @@ def e7(R: Runner, cfg, sel):
             e["trip_criticality_w"] = 3.8 if is_p else 0.8
             recs.append(e)
         for m in sel.get("methods") or c["methods"]:
-            out.append(R.run("E7", f"{m}_share{share}", lambda m=m, recs=recs: simulate(
+            out.append(R.run("E7", f"{m}_{c['scenario']}_share{share}", lambda m=m, recs=recs: simulate(
                 m, recs, data["environment"], c["fleet"], M, site, cfg),
-                {"scenario": c["scenario"], "priority_share": share, "n_priority_assigned": n_pri}))
+                {"scenario": c["scenario"], "priority_share": share, "n_priority_assigned": n_pri,
+                 "cohort_centre_idx": centre}))
     R.write_summary("E7", out)
 
 
