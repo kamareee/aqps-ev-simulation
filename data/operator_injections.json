@@ -1,0 +1,36 @@
+{
+  "case_1_breakdown": {
+    "time_idx": 24,
+    "type": "vehicle_breakdown",
+    "description": "A priority van breaks down on route; standby non-priority van EV_009 is promoted with a 32 kWh mission and a 15:30 departure.",
+    "promote_id": "EV_009",
+    "new_mission_kwh": 32.0,
+    "new_dep_idx": 38,
+    "new_w": 4.2,
+    "operator_choice": "recommended"
+  },
+  "case_2_driver_unavailable": {
+    "time_idx": 28,
+    "type": "driver_unavailable",
+    "description": "Driver absence delays priority van EV_050 by 2 h.",
+    "delay_id": "EV_050",
+    "delay_steps": 8,
+    "operator_choice": "recommended"
+  },
+  "case_3_roster_swap": {
+    "time_idx": 22,
+    "type": "roster_swap",
+    "description": "FMS swaps the afternoon route from priority EV_050 to non-priority EV_009; operator keeps all urgent vehicles.",
+    "swap_from_id": "EV_050",
+    "swap_to_id": "EV_009",
+    "operator_choice": "keep_all_urgent"
+  },
+  "case_4_pv_shortfall": {
+    "time_idx": 24,
+    "type": "pv_shortfall",
+    "description": "Cloud front: realised PV falls to 25 % of the day-ahead forecast for 2 h.",
+    "pv_drop_factor": 0.25,
+    "duration_steps": 8,
+    "operator_choice": "recommended"
+  }
+}

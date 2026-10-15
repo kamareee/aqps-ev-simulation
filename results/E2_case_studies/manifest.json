@@ -1,0 +1,23 @@
+{
+  "experiment_id": "E2_case_studies",
+  "git_commit": "046ca5d",
+  "run_date": "2026-10-15T13:47:40.356519",
+  "machine": {
+    "os": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.12",
+    "processor": "Intel64 Family 6 Model 189 Stepping 1, GenuineIntel"
+  },
+  "seeds": [
+    200
+  ],
+  "config": {
+    "cases": [
+      "case_1_breakdown",
+      "case_2_driver_unavailable",
+      "case_3_roster_swap",
+      "case_4_pv_shortfall"
+    ],
+    "fleet": 90,
+    "scenario": "S3_HighPriority"
+  }
+}

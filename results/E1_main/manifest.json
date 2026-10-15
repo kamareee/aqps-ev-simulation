@@ -1,0 +1,33 @@
+{
+  "experiment_id": "E1_main",
+  "git_commit": "046ca5d",
+  "run_date": "2026-10-15T13:46:14.437908",
+  "machine": {
+    "os": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.12",
+    "processor": "Intel64 Family 6 Model 189 Stepping 1, GenuineIntel"
+  },
+  "seeds": [
+    42
+  ],
+  "config": {
+    "methods": [
+      "LLF",
+      "EDF",
+      "MPC-only",
+      "Offline-Optimal",
+      "AQPS-static",
+      "AQPS-RT",
+      "AQPS-RT-ET"
+    ],
+    "fleets": [
+      45,
+      90
+    ],
+    "scenarios": [
+      "S1_Baseline",
+      "S3_HighPriority",
+      "S6_PeakStress"
+    ]
+  }
+}

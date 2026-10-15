@@ -1,0 +1,13 @@
+run_id,case,t,trigger,chosen,option,horizon_cost,cost_delta,soft,n_priority
+AQPS-RT-ET_case_1_breakdown,case_1_breakdown,24,"arrival,departure,injection",recommended,recommended,165.905,0.0,False,8
+AQPS-RT-ET_case_1_breakdown,case_1_breakdown,24,"arrival,departure,injection",recommended,keep_all_urgent,165.905,0.0,False,9
+AQPS-RT-ET_case_1_breakdown,case_1_breakdown,24,"arrival,departure,injection",recommended,downgrade,166.49,0.585,False,7
+AQPS-RT-ET_case_2_driver_unavailable,case_2_driver_unavailable,28,"arrival,departure,injection",recommended,recommended,204.462,0.0,False,19
+AQPS-RT-ET_case_2_driver_unavailable,case_2_driver_unavailable,28,"arrival,departure,injection",recommended,keep_all_urgent,204.462,0.0,False,20
+AQPS-RT-ET_case_2_driver_unavailable,case_2_driver_unavailable,28,"arrival,departure,injection",recommended,downgrade,205.384,0.922,False,18
+AQPS-RT-ET_case_3_roster_swap,case_3_roster_swap,22,"arrival,departure,injection",keep_all_urgent,recommended,175.111,0.0,False,5
+AQPS-RT-ET_case_3_roster_swap,case_3_roster_swap,22,"arrival,departure,injection",keep_all_urgent,keep_all_urgent,175.111,0.0,False,6
+AQPS-RT-ET_case_3_roster_swap,case_3_roster_swap,22,"arrival,departure,injection",keep_all_urgent,downgrade,176.346,1.235,False,4
+AQPS-RT-ET_case_4_pv_shortfall,case_4_pv_shortfall,24,"arrival,departure,injection,pv_dev",recommended,recommended,165.308,0.0,False,7
+AQPS-RT-ET_case_4_pv_shortfall,case_4_pv_shortfall,24,"arrival,departure,injection,pv_dev",recommended,keep_all_urgent,165.308,0.0,False,8
+AQPS-RT-ET_case_4_pv_shortfall,case_4_pv_shortfall,24,"arrival,departure,injection,pv_dev",recommended,downgrade,166.095,0.787,False,6

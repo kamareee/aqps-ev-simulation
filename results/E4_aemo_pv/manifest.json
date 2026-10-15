@@ -1,0 +1,32 @@
+{
+  "experiment_id": "E4_aemo_pv",
+  "git_commit": "046ca5d",
+  "run_date": "2026-10-15T13:53:55.083884",
+  "machine": {
+    "os": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.12",
+    "processor": "Intel64 Family 6 Model 189 Stepping 1, GenuineIntel"
+  },
+  "seeds": [
+    101,
+    102,
+    103,
+    104,
+    105,
+    106
+  ],
+  "config": {
+    "days": [
+      "2025-01-15",
+      "2025-03-12",
+      "2025-10-08",
+      "2025-11-19",
+      "2025-06-18",
+      "2025-08-20"
+    ],
+    "fleets": [
+      45,
+      90
+    ]
+  }
+}

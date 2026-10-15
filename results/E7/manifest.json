@@ -1,0 +1,307 @@
+{
+  "experiment": "E7",
+  "git_commit": "7ae01c0f6e22476073edc702e62e7bc5bfc8cc0e",
+  "git_dirty": false,
+  "config_sha256": "b8cbee4d8e64833c4c251b53fb789a47d4dbc4b3a7fc2d7e3608e6b574ae196e",
+  "config": {
+    "time": {
+      "step_minutes": 15,
+      "n_steps": 120,
+      "start_hour": 6
+    },
+    "tariff": {
+      "peak": {
+        "price": 0.32,
+        "windows": [
+          [
+            15,
+            21
+          ]
+        ]
+      },
+      "shoulder": {
+        "price": 0.21,
+        "windows": [
+          [
+            7,
+            15
+          ],
+          [
+            21,
+            22
+          ]
+        ]
+      },
+      "off_peak": {
+        "price": 0.18,
+        "windows": [
+          [
+            22,
+            24
+          ],
+          [
+            0,
+            7
+          ]
+        ]
+      }
+    },
+    "site": {
+      "pv_kw": 20.0,
+      "bess": {
+        "capacity_kwh": 10.0,
+        "charge_kw": 2.5,
+        "charge_window": [
+          10,
+          14
+        ],
+        "discharge_window": [
+          15,
+          21
+        ],
+        "round_trip_eff": 0.9
+      }
+    },
+    "fleets": {
+      "45": {
+        "n_evse": 16,
+        "site_kw": 150.0
+      },
+      "90": {
+        "n_evse": 35,
+        "site_kw": 300.0
+      },
+      "180": {
+        "n_evse": 60,
+        "site_kw": 600.0
+      }
+    },
+    "optimizer": {
+      "alpha1": 1.0,
+      "alpha2": 100.0,
+      "alpha3": 1e-05,
+      "x_min_priority_kw": 3.84,
+      "solver": "MOSEK",
+      "mission_soft_weight": 10.0
+    },
+    "layer0": {
+      "k_atc": 1.5,
+      "w_min_candidate": 2.0,
+      "feas_tol_kwh": 0.01
+    },
+    "layer1": {
+      "rotation_margin": 1.02,
+      "preempt_slack_h": 2.0
+    },
+    "event_trigger": {
+      "t_max_steps": 4,
+      "pv_dev_threshold_kw": 3.5,
+      "preview_on_injection": true,
+      "preview_on_escalation": false
+    },
+    "offline": {
+      "milp_time_limit_s": 900,
+      "mip_rel_gap": 0.01
+    },
+    "experiments": {
+      "E1": {
+        "fleets": [
+          45,
+          90
+        ],
+        "scenarios": [
+          "S1_Baseline",
+          "S2_Contention",
+          "S3_PeakStress"
+        ],
+        "methods": [
+          "LLF",
+          "EDF",
+          "MPC-only",
+          "Offline-Optimal",
+          "AQPS-v1",
+          "AQPS-static",
+          "AQPS-RT",
+          "AQPS-RT-ET"
+        ]
+      },
+      "E2": {
+        "fleet": 90,
+        "scenario": "S2_Contention",
+        "methods": [
+          "LLF",
+          "EDF",
+          "AQPS-static",
+          "AQPS-RT-ET"
+        ]
+      },
+      "E3": {
+        "fleet": 90,
+        "scenario": "S2_Contention",
+        "seeds": [
+          3000,
+          3029
+        ],
+        "methods": [
+          "LLF",
+          "EDF",
+          "MPC-only",
+          "AQPS-static",
+          "AQPS-RT-ET"
+        ],
+        "disruption": {
+          "arrival_shift_steps": 4,
+          "energy_scale": [
+            0.88,
+            1.15
+          ],
+          "promotion_prob": 0.08
+        }
+      },
+      "E4": {
+        "fleets": [
+          45,
+          90
+        ],
+        "scenario": "S2_Contention",
+        "methods": [
+          "LLF",
+          "EDF",
+          "MPC-only",
+          "AQPS-static",
+          "AQPS-RT-ET"
+        ]
+      },
+      "E5": {
+        "fleets": [
+          45,
+          90
+        ],
+        "scenarios": [
+          "S1_Baseline",
+          "S2_Contention",
+          "S3_PeakStress"
+        ],
+        "methods": [
+          "AQPS-RT",
+          "AQPS-RT-ET"
+        ],
+        "t_max_sweep": [
+          1,
+          2,
+          4,
+          8
+        ],
+        "scalability": {
+          "fleets": [
+            45,
+            90,
+            180
+          ],
+          "ratios": [
+            2,
+            3,
+            4
+          ],
+          "methods": [
+            "LLF",
+            "EDF",
+            "AQPS-RT-ET"
+          ]
+        }
+      },
+      "E6": {
+        "fleet": 90,
+        "scenario": "S2_Contention",
+        "method": "AQPS-RT-ET",
+        "alpha3": [
+          1e-06,
+          1e-05,
+          0.0001,
+          0.001,
+          0.01
+        ],
+        "alpha2": [
+          10,
+          30,
+          100,
+          300,
+          1000
+        ],
+        "k_atc": [
+          0.5,
+          1.0,
+          1.5,
+          2.0,
+          3.0
+        ],
+        "k_atc_ratio": 4,
+        "reserve_frac": [
+          0.05,
+          0.1,
+          0.15,
+          0.2
+        ],
+        "pv_dev_threshold_kw": [
+          1.0,
+          2.0,
+          3.5,
+          5.0,
+          8.0
+        ],
+        "preempt_slack_h": [
+          1.0,
+          2.0,
+          3.0,
+          null
+        ]
+      },
+      "E7": {
+        "fleet": 45,
+        "scenario": "S2_Contention",
+        "shares": [
+          0.3,
+          0.5,
+          0.65,
+          0.8,
+          0.9
+        ],
+        "methods": [
+          "LLF",
+          "EDF",
+          "MPC-only",
+          "AQPS-static",
+          "AQPS-RT-ET"
+        ]
+      }
+    }
+  },
+  "run_started": "2026-10-16T10:02:09",
+  "machine": {
+    "os": "Windows-11-10.0.26200-SP0",
+    "processor": "Intel64 Family 6 Model 189 Stepping 1, GenuineIntel",
+    "machine": "AMD64",
+    "cpu_count": 8
+  },
+  "versions": {
+    "python": "3.12.12",
+    "numpy": "2.4.2",
+    "pandas": "3.0.0",
+    "cvxpy": "1.8.1",
+    "mosek": "11.2.6"
+  },
+  "inputs": {
+    "pv_days_sha256": "3ed54b6d0375725662188024441a1bd95bac6a59b6683ca5bb1ae9b87f36e48f",
+    "injections_sha256": "52fe3acc5c823108109d6877d31a0d81773048ebe1472b94a4fe3aca89c44908",
+    "aemo_checksums_sha256": "6742dc50b7a04e33e2d2318bd7defac5438aade6f725db4f80a22d88047064cb",
+    "fleet_45_sha256": "c7a610e95243684cb35de2a4f28c931933f7899866a1423bedab98b449ce6c31",
+    "fleet_90_sha256": "323dbf21897b2a57327244cb80f92931c2f109eb6e8be69015afa7890cba2b3d",
+    "fleet_180_sha256": "766df82f49b741f10cad5daa76fa7a4b16562559c2e3dd067dec1a44ed9f13f4"
+  },
+  "selection": {
+    "fleets": null,
+    "scenarios": null,
+    "methods": null,
+    "n_seeds": null
+  }
+}
