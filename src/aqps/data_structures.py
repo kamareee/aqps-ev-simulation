@@ -1,87 +1,97 @@
 """
-Data structures for the revised 3-Layer AQPS framework (Layer 0, Layer 1, Layer 2 + Operator Loop).
+Vehicle state for the AQPS simulator (revision v3). All energies in kWh (never % SoC).
+
+E_session : energy the operator would like added this visit (soft target, Eq. 3/9)
+E_mission : next trip + return + reserve - arrival energy (hard target for priority EVs, Eq. 10)
 """
 
-from dataclasses import dataclass, field
-from typing import Optional, List, Dict
-from enum import Enum
+from dataclasses import dataclass, field, replace
+from typing import Dict, Any
 
 
 @dataclass
 class Vehicle:
-    """
-    Represents a commercial fleet EV with multi-trip roster metadata.
-    Grounded in empirical commercial van parameters (Vales-Alonso & Alcaraz, 2026; Fiori & Marzano, 2018).
-    """
     id: str
-    arrival_time_idx: int
-    departure_time_idx: int
-    target_energy_kwh: float
-    max_charging_power_kw: float
-    is_priority: bool = False
-    initial_energy_kwh: float = 0.0
-    energy_delivered: float = 0.0
-    energy_needed: float = field(init=False)
-
-    # WP2 / WP3 Layer 0 & Safe-Release attributes (all in kWh, never % SoC)
-    battery_cap_kwh: float = 68.0
-    eod_soc_kwh: float = 15.0
-    next_trip_kwh: float = 18.0
-    return_kwh: float = 6.0
-    reserve_kwh: float = 6.8          # 10% safety floor (SoC_min = 0.10)
+    arrival_idx: int
+    departure_idx: int
+    p_max_kw: float
+    battery_cap_kwh: float
+    eod_soc_kwh: float
+    e_session_kwh: float
+    e_mission_kwh: float
+    next_trip_kwh: float
+    return_kwh: float
+    reserve_kwh: float
     further_trips_today_kwh: float = 0.0
-    next_day_dep_idx: int = 96        # Next-day first departure step index
-    next_day_req_kwh: float = 25.0    # Energy required for next-day first shift
-    trip_criticality_w: float = 1.0   # Roster criticality weight w_i
-    archetype: str = "Medium"
-    day_ahead_priority: bool = False  # Operator/day-ahead initial flag
+    evening_return_idx: int = 0
+    next_day_dep_idx: int = 0
+    next_day_req_kwh: float = 0.0
+    trip_criticality_w: float = 1.0
+    day_ahead_priority: bool = False   # initial operator/day-ahead flag (never changed)
+    roster_priority: bool = False      # true mission criticality, updated by intra-day injections
+    overnight: bool = False
+
+    # dynamic state
+    is_priority: bool = False
+    energy_delivered: float = 0.0
     atc_score: float = 0.0
-    laxity: float = 0.0
+    laxity_h: float = 0.0
     safe_released: bool = False
     preempted_count: int = 0
+    rotated_count: int = 0
+    extra: Dict[str, Any] = field(default_factory=dict)
 
-    def __post_init__(self):
-        # E_i^req is the mission-sufficient session requirement
-        self.energy_needed = max(0.0, self.target_energy_kwh - self.energy_delivered)
+    # ---- derived quantities -------------------------------------------------
+    @property
+    def session_remaining(self) -> float:
+        return max(0.0, self.e_session_kwh - self.energy_delivered)
+
+    @property
+    def mission_remaining(self) -> float:
+        return max(0.0, self.e_mission_kwh - self.energy_delivered)
 
     @property
     def current_energy_kwh(self) -> float:
         return min(self.battery_cap_kwh, self.eod_soc_kwh + self.energy_delivered)
 
     @property
-    def mission_sufficient_kwh(self) -> float:
-        """Minimum energy needed in battery at departure for next trip + return + reserve."""
-        return min(self.battery_cap_kwh, self.next_trip_kwh + self.return_kwh + self.reserve_kwh)
+    def mission_level_kwh(self) -> float:
+        """Battery energy needed for next trip + return + reserve (safe-release condition (a))."""
+        return self.next_trip_kwh + self.return_kwh + self.reserve_kwh
 
     @property
-    def session_req_remaining_kwh(self) -> float:
-        return max(0.0, self.target_energy_kwh - self.energy_delivered)
+    def done(self) -> bool:
+        return self.session_remaining <= 1e-3
+
+    def present(self, t: int) -> bool:
+        return self.arrival_idx <= t < self.departure_idx
 
     def clone(self) -> "Vehicle":
-        v = Vehicle(
-            id=self.id,
-            arrival_time_idx=self.arrival_time_idx,
-            departure_time_idx=self.departure_time_idx,
-            target_energy_kwh=self.target_energy_kwh,
-            max_charging_power_kw=self.max_charging_power_kw,
-            is_priority=self.is_priority,
-            initial_energy_kwh=self.initial_energy_kwh,
-            energy_delivered=self.energy_delivered,
-            battery_cap_kwh=self.battery_cap_kwh,
-            eod_soc_kwh=self.eod_soc_kwh,
-            next_trip_kwh=self.next_trip_kwh,
-            return_kwh=self.return_kwh,
-            reserve_kwh=self.reserve_kwh,
-            further_trips_today_kwh=self.further_trips_today_kwh,
-            next_day_dep_idx=self.next_day_dep_idx,
-            next_day_req_kwh=self.next_day_req_kwh,
-            trip_criticality_w=self.trip_criticality_w,
-            archetype=self.archetype,
-            day_ahead_priority=self.day_ahead_priority,
-            atc_score=self.atc_score,
-            laxity=self.laxity,
-            safe_released=self.safe_released,
-            preempted_count=self.preempted_count,
+        return replace(self, extra=dict(self.extra))
+
+    @staticmethod
+    def from_record(ev: Dict[str, Any], reserve_frac: float = None) -> "Vehicle":
+        is_p = ev["priority"] == "High"
+        reserve = float(ev["reserve_kwh"])
+        trip = float(ev["next_trip_kwh"])
+        ret = float(ev["return_kwh"])
+        eod = float(ev["eod_soc_kwh"])
+        e_sess = float(ev["e_session_kwh"])
+        e_miss = float(ev["e_mission_kwh"])
+        if reserve_frac is not None:  # E6 reserve sweep: recompute mission with new reserve
+            reserve = reserve_frac * float(ev["battery_cap_kwh"])
+            e_miss = max(0.0, trip + ret + reserve - eod)
+            e_sess = max(e_sess, e_miss)
+        return Vehicle(
+            id=ev["id"], arrival_idx=int(ev["arrival_idx"]), departure_idx=int(ev["departure_idx"]),
+            p_max_kw=float(ev["p_max"]), battery_cap_kwh=float(ev["battery_cap_kwh"]),
+            eod_soc_kwh=eod, e_session_kwh=e_sess, e_mission_kwh=min(e_miss, e_sess),
+            next_trip_kwh=trip, return_kwh=ret, reserve_kwh=reserve,
+            further_trips_today_kwh=float(ev.get("further_trips_today_kwh", 0.0)),
+            evening_return_idx=int(ev["evening_return_idx"]),
+            next_day_dep_idx=int(ev["next_day_dep_idx"]),
+            next_day_req_kwh=float(ev["next_day_req_kwh"]),
+            trip_criticality_w=float(ev["trip_criticality_w"]),
+            day_ahead_priority=is_p, roster_priority=is_p, overnight=bool(ev.get("overnight", False)),
+            is_priority=is_p,
         )
-        v.energy_needed = self.energy_needed
-        return v

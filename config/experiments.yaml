@@ -1,0 +1,75 @@
+# Single source of truth for all simulation parameters (revision v3).
+# Every run copies this file's hash into results/<exp>/manifest.json.
+
+time:
+  step_minutes: 15            # control step Δt
+  n_steps: 120                # 30 h window: 06:00 AEST day D -> 12:00 AEST day D+1
+  start_hour: 6               # AEST (NEM market time, no daylight saving)
+
+tariff:                       # $/kWh, AEST clock hours [start, end)
+  peak: {price: 0.32, windows: [[15, 21]]}
+  shoulder: {price: 0.21, windows: [[7, 15], [21, 22]]}
+  off_peak: {price: 0.18, windows: [[22, 24], [0, 7]]}
+
+site:
+  pv_kw: 20.0
+  bess:                       # fixed (exogenous) schedule, signed: + discharge, - charge
+    capacity_kwh: 10.0
+    charge_kw: 2.5            # 10:00-14:00 (10 kWh)
+    charge_window: [10, 14]
+    discharge_window: [15, 21]
+    round_trip_eff: 0.90      # discharge = 10 kWh * 0.9 spread over the peak window
+
+fleets:
+  45:  {n_evse: 16, site_kw: 150.0}
+  90:  {n_evse: 35, site_kw: 300.0}
+  180: {n_evse: 60, site_kw: 600.0}
+
+optimizer:
+  alpha1: 1.0                 # $ scale
+  alpha2: 100.0               # non-completion (Eq. 3)
+  alpha3: 1.0e-5              # Tikhonov regulariser (Eq. 4); 2*a3*P_site << (C_sh - C_off)*dt
+  x_min_priority_kw: 3.84     # Eq. 8 (16 A @ 240 V)
+  solver: MOSEK               # no fallback; set CLARABEL only for local smoke tests
+  mission_soft_weight: 10.0   # ONLY used if hard Eq. 10 is infeasible (logged fallback)
+
+layer0:
+  k_atc: 1.5
+  w_min_candidate: 2.0        # roster criticality threshold for non-flagged urgent candidates
+  feas_tol_kwh: 0.01
+
+layer1:
+  rotation_margin: 1.02       # simulated-operator guarded FIFO rotation: pi_new > margin * pi_head
+  preempt_slack_h: 2.0        # just-in-time preemption: Tiers 1-3 act only when a waiting priority EV's
+                              # mission slack <= 2 h (null = eager preemption, as in the submitted method)
+
+event_trigger:
+  t_max_steps: 4              # 60 min periodic re-solve
+  pv_dev_threshold_kw: 3.5
+  preview_on_injection: true
+  preview_on_escalation: false
+
+offline:
+  milp_time_limit_s: 900
+  mip_rel_gap: 0.01
+
+experiments:
+  E1: {fleets: [45, 90], scenarios: [S1_Baseline, S2_Contention, S3_PeakStress],
+       methods: [LLF, EDF, MPC-only, Offline-Optimal, AQPS-v1, AQPS-static, AQPS-RT, AQPS-RT-ET]}
+  E2: {fleet: 90, scenario: S2_Contention, methods: [LLF, EDF, AQPS-static, AQPS-RT-ET]}
+  E3: {fleet: 90, scenario: S2_Contention, seeds: [3000, 3029],
+       methods: [LLF, EDF, MPC-only, AQPS-static, AQPS-RT-ET],
+       disruption: {arrival_shift_steps: 4, energy_scale: [0.88, 1.15], promotion_prob: 0.08}}
+  E4: {fleets: [45, 90], scenario: S2_Contention, methods: [LLF, EDF, MPC-only, AQPS-static, AQPS-RT-ET]}
+  E5: {fleets: [45, 90], scenarios: [S1_Baseline, S2_Contention, S3_PeakStress],
+       methods: [AQPS-RT, AQPS-RT-ET], t_max_sweep: [1, 2, 4, 8],
+       scalability: {fleets: [45, 90, 180], ratios: [2, 3, 4], methods: [LLF, EDF, AQPS-RT-ET]}}
+  E6: {fleet: 90, scenario: S2_Contention, method: AQPS-RT-ET,
+       alpha3: [1.0e-6, 1.0e-5, 1.0e-4, 1.0e-3, 1.0e-2],
+       alpha2: [10, 30, 100, 300, 1000],
+       k_atc: [0.5, 1.0, 1.5, 2.0, 3.0], k_atc_ratio: 4,
+       reserve_frac: [0.05, 0.10, 0.15, 0.20],
+       pv_dev_threshold_kw: [1.0, 2.0, 3.5, 5.0, 8.0],
+       preempt_slack_h: [1.0, 2.0, 3.0, null]}
+  E7: {fleet: 45, scenario: S2_Contention, shares: [0.3, 0.5, 0.65, 0.8, 0.9],
+       methods: [LLF, EDF, MPC-only, AQPS-static, AQPS-RT-ET]}

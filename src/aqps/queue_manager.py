@@ -1,241 +1,157 @@
 """
-WP3 — Layer 1: Queue Management with Active Priority Charging Queue (Q_k^act),
-Laxity-Based Non-Priority Preemption, Safe Release, and Guarded FIFO Priority Rotation.
+Layer 1: EVSE admission with safe release (revision v3).
 
-Queues maintained at each step k:
-- Q_k^act : Active Priority Charging Queue (FIFO-ordered list of priority EVs currently on EVSEs, |Q_k^act| <= M).
-- Q_k^p   : Priority Waiting Queue (priority EVs awaiting EVSE admission).
-- Q_k^n   : Non-Priority Queue (non-priority EVs).
-
-4-Tier Disconnection Hierarchy when all M EVSEs are occupied and an urgent priority EV arrives:
-1. Tier 1 (Non-Priority Preemption): Disconnect connected non-priority EV with highest laxity.
-2. Tier 2 (Safe Release from Q_k^act): Release priority EV in Q_k^act satisfying all 3 kWh safe-release
-   conditions (a)-(c), largest surplus energy and latest departure first.
-3. Tier 3 (Guarded FIFO Rotation from Q_k^act): Inspect priority EVs in Q_k^act in FIFO entry order
-   (earliest-admitted first, having charged the longest). If incoming EV has higher ATC urgency
-   (pi_new > pi_head) and the candidate retains positive slack (s_j > dt) or has met its immediate
-   next-trip energy, rotate it to Q_k^p and admit the incoming priority EV to the tail of Q_k^act.
-4. Tier 4 (Operator Escalation): Otherwise disconnect nobody; hold incoming EV in Q_k^p and escalate.
+Queues:  Q_act (connected priority EVs, FIFO by admission), Q_p (waiting priority EVs, ATC order),
+         Q_n (non-priority EVs, FIFO by arrival).
+Just-in-time preemption (config layer1.preempt_slack_h = delta): a waiting priority EV whose mission
+slack (d - t) dt - E_mission_rem / xbar is still > delta waits for a naturally freed EVSE; Tiers 1-3
+act only once its slack reaches delta (delta = null gives eager preemption, as in the submitted method).
+When a waiting priority EV needs an EVSE and all M are occupied:
+  Tier 1  Non-priority preemption: disconnect the connected non-priority EV with the largest laxity.
+  Tier 2  Safe release (automatic): disconnect the connected priority EV that satisfies all of
+          (a) E_curr >= E_trip + E_ret + r
+          (b) E_further_today <= E_curr - (E_trip + E_ret + r)
+          (c) xbar * (d_next_day - a_return) * dt >= E_next_day - surplus   (skipped for overnight EVs)
+          choosing the largest surplus, then the latest departure. It leaves with >= mission energy.
+  Tier 3  Guarded FIFO rotation (SIMULATED OPERATOR DECISION, stands in for the operator preview):
+          from the head of Q_act, rotate out the first EV j with pi_new > margin * pi_j and
+          (E_curr_j >= E_trip + E_ret + r  or  laxity_j > dt). If j has met its mission it becomes
+          non-priority; otherwise it returns to Q_p with its priority.
+  Tier 4  Otherwise disconnect nobody; the incoming EV waits and an escalation episode is opened.
+Proposition 2 (no disconnection below mission energy) covers Tiers 1-2 (automatic tiers).
+Rotations are counted separately; their effect appears in the mission-sufficiency metric.
 """
 
-from typing import List, Dict, Tuple, Set
+from typing import Dict, List, Set, Tuple
+
 from .data_structures import Vehicle
 
 
 class QueueManager:
-    def __init__(self, num_chargers: int, dt_hours: float = 0.25):
-        self.num_chargers = num_chargers
-        self.dt = dt_hours
-        self.all_vehicles: Dict[str, Vehicle] = {}
-        self.connected_ids: Set[str] = set()
-        # Q_k^act: FIFO-ordered list of vehicle IDs currently charging as Priority EVs (max length M)
-        self.active_priority_queue: List[str] = []
-        # Track step index when each priority EV entered Q_k^act
-        self.q_act_entry_step: Dict[str, int] = {}
+    def __init__(self, n_evse: int, dt_h: float, rotation_margin: float = 1.02,
+                 preempt_slack_h: float = None):
+        self.preempt_slack_h = preempt_slack_h  # None = eager preemption (submitted design)
+        self.M = int(n_evse)
+        self.dt = float(dt_h)
+        self.margin = float(rotation_margin)
+        self.connected: Set[str] = set()
+        self.q_act: List[str] = []
+        self.open_escalations: Set[str] = set()
 
-    def process_arrivals(self, vehicles: List[Vehicle], current_time: int):
-        for v in vehicles:
-            self.all_vehicles[v.id] = v
+    # ---------------------------------------------------------------- helpers
+    def laxity(self, v: Vehicle, t: int) -> float:
+        rem_h = (v.departure_idx - t) * self.dt
+        v.laxity_h = rem_h - v.session_remaining / max(v.p_max_kw, 1e-6)
+        return v.laxity_h
 
-    def process_departures(self, vehicle_ids: List[str]):
-        for vid in vehicle_ids:
-            if vid in self.all_vehicles:
-                del self.all_vehicles[vid]
-            self.connected_ids.discard(vid)
-            if vid in self.active_priority_queue:
-                self.active_priority_queue.remove(vid)
-            self.q_act_entry_step.pop(vid, None)
+    def mission_slack_h(self, v: Vehicle, t: int) -> float:
+        return (v.departure_idx - t) * self.dt - v.mission_remaining / max(v.p_max_kw, 1e-6)
 
-    def update_vehicle_energy(self, vehicle_id: str, energy_delivered: float):
-        if vehicle_id in self.all_vehicles:
-            v = self.all_vehicles[vehicle_id]
-            v.energy_delivered += energy_delivered
-            needed = v.target_energy_kwh - v.energy_delivered
-            v.energy_needed = max(0.0, needed)
-            if v.energy_needed <= 0.05:
-                self.connected_ids.discard(vehicle_id)
-                if vehicle_id in self.active_priority_queue:
-                    self.active_priority_queue.remove(vehicle_id)
-
-    def get_queue_size(self) -> int:
-        active = [v for v in self.all_vehicles.values() if v.energy_needed > 0.05]
-        return max(0, len(active) - self.num_chargers)
-
-    def _compute_laxity_hours(self, v: Vehicle, current_time: int) -> float:
-        rem_h = (v.departure_time_idx - current_time) * self.dt
-        if rem_h <= 0:
-            return -999.0
-        charge_h = v.energy_needed / max(v.max_charging_power_kw, 0.1)
-        v.laxity = rem_h - charge_h
-        return v.laxity
-
-    def check_safe_release(
-        self, v: Vehicle, current_time: int, reserve_override_kwh: float = None
-    ) -> Tuple[bool, float]:
-        """
-        Safe-release condition — computed strictly in kWh, never % SoC.
-        All three conditions must hold:
-          (a) Current energy >= next_trip_kwh + return_kwh + reserve_kwh.
-          (b) No further trip today needs more energy before the next charging opportunity.
-          (c) The overnight window from return to next-day first departure can still
-              deliver the remaining next-day requirement at available charger power.
-        """
-        r = reserve_override_kwh if reserve_override_kwh is not None else v.reserve_kwh
-        curr_e = v.current_energy_kwh
-        req_mission = v.next_trip_kwh + v.return_kwh + r
-        surplus = curr_e - req_mission
-
-        if surplus < 0.0:
+    def safe_release_ok(self, v: Vehicle) -> Tuple[bool, float]:
+        surplus = v.current_energy_kwh - v.mission_level_kwh
+        if surplus < -1e-6:                                    # (a)
             return False, surplus
-        if v.further_trips_today_kwh > surplus + 1e-3:
+        if v.further_trips_today_kwh > surplus + 1e-6:         # (b)
             return False, surplus
-
-        overnight_return_idx = max(v.departure_time_idx + 8, 60)
-        overnight_steps = max(0, v.next_day_dep_idx - overnight_return_idx)
-        overnight_deliverable_kwh = overnight_steps * self.dt * v.max_charging_power_kw
-        if overnight_deliverable_kwh < v.next_day_req_kwh - surplus:
-            return False, surplus
-
+        if not v.overnight:                                    # (c)
+            window = max(0, v.next_day_dep_idx - v.evening_return_idx) * self.dt * v.p_max_kw
+            if window < v.next_day_req_kwh - surplus:
+                return False, surplus
         return True, surplus
 
-    def get_active_assignment(
-        self,
-        current_time: int,
-        current_system_capacity: float,
-        enable_safe_release: bool = True,
-        use_atc_order: bool = True,
-        reserve_override_kwh: float = None,
-    ) -> Tuple[List[Vehicle], Dict[str, List[str]]]:
-        """
-        Executes Layer 1 admission using Q_k^act (capacity M), Q_k^p, and Q_k^n.
-        """
-        events = {
-            "preempted_np": [],
-            "safe_released_p": [],
-            "rotated_p": [],
-            "escalated_p": [],
-        }
-        active_pool = [
-            v for v in self.all_vehicles.values()
-            if v.energy_needed > 0.05 and v.departure_time_idx > current_time
-        ]
-        if not active_pool:
-            self.connected_ids.clear()
-            self.active_priority_queue.clear()
-            return [], events
+    def drop(self, vid: str):
+        self.connected.discard(vid)
+        if vid in self.q_act:
+            self.q_act.remove(vid)
 
-        active_map = {v.id: v for v in active_pool}
-        for v in active_pool:
-            self._compute_laxity_hours(v, current_time)
+    # ---------------------------------------------------------------- assign
+    def assign(self, t: int, present: List[Vehicle], safe_release: bool, rotation: bool,
+               atc_order: bool) -> Tuple[List[Vehicle], Dict[str, List[str]]]:
+        ev = {"preempted": [], "safe_released": [], "rotated": [], "escalation_new": [],
+              "waiting_priority": [], "deferred_priority": []}
+        active = {v.id: v for v in present if not v.done and v.departure_idx > t}
+        for vid in list(self.connected):
+            if vid not in active:
+                self.drop(vid)
+        for v in active.values():
+            self.laxity(v, t)
 
-        # Prune Q_k^act of vehicles that finished, departed, or are no longer priority
-        self.active_priority_queue = [
-            vid for vid in self.active_priority_queue
-            if vid in active_map and active_map[vid].is_priority
-        ]
+        self.q_act = [vid for vid in self.q_act if vid in self.connected and active[vid].is_priority]
+        for vid in sorted(self.connected):
+            if active[vid].is_priority and vid not in self.q_act:
+                self.q_act.append(vid)
 
-        # Maintain currently connected dict
-        connected: Dict[str, Vehicle] = {
-            vid: active_map[vid]
-            for vid in self.connected_ids
-            if vid in active_map
-        }
-
-        # Ensure any connected priority vehicle is registered in Q_k^act in FIFO order
-        for vid, v in connected.items():
-            if v.is_priority and vid not in self.active_priority_queue:
-                self.active_priority_queue.append(vid)
-                self.q_act_entry_step.setdefault(vid, current_time)
-
-        # Waiting priority vehicles Q_k^p (not currently in connected)
-        waiting_priority = [
-            v for v in active_pool if v.is_priority and v.id not in connected
-        ]
-        if use_atc_order:
-            waiting_priority.sort(key=lambda v: (-v.atc_score, v.arrival_time_idx))
+        waiting = [v for v in active.values() if v.is_priority and v.id not in self.connected]
+        if atc_order:
+            waiting.sort(key=lambda v: (-v.atc_score, v.arrival_idx, v.id))
         else:
-            waiting_priority.sort(key=lambda v: v.arrival_time_idx)
+            waiting.sort(key=lambda v: (v.arrival_idx, v.id))
 
-        # Process each waiting priority vehicle in Q_k^p
-        for p_ev in waiting_priority:
-            if len(connected) < self.num_chargers:
-                connected[p_ev.id] = p_ev
-                self.active_priority_queue.append(p_ev.id)
-                self.q_act_entry_step[p_ev.id] = current_time
+        for p in waiting:
+            if len(self.connected) < self.M:
+                self._admit(p)
                 continue
-
-            # All M chargers are occupied: apply 4-Tier Disconnection Hierarchy
-            # Tier 1: Connected non-priority EVs (Q_k^n), highest laxity victim first
-            conn_np = [v for v in connected.values() if not v.is_priority]
-            if conn_np:
-                conn_np.sort(key=lambda v: v.laxity, reverse=True)
-                victim = conn_np[0]
-                del connected[victim.id]
+            if self.preempt_slack_h is not None:
+                if self.mission_slack_h(p, t) > self.preempt_slack_h:
+                    ev["deferred_priority"].append(p.id)  # enough slack: wait for a natural free EVSE
+                    continue
+            conn_np = [active[vid] for vid in self.connected if not active[vid].is_priority]
+            if conn_np:                                                    # Tier 1
+                victim = max(conn_np, key=lambda v: (v.laxity_h, v.id))
+                self.drop(victim.id)
                 victim.preempted_count += 1
-                events["preempted_np"].append(victim.id)
-                connected[p_ev.id] = p_ev
-                self.active_priority_queue.append(p_ev.id)
-                self.q_act_entry_step[p_ev.id] = current_time
+                ev["preempted"].append(victim.id)
+                self._admit(p)
                 continue
-
-            # All M chargers are occupied by Priority EVs (|Q_k^act| == M)
-            if enable_safe_release:
-                # Tier 2: Full Safe Release (conditions a, b, c in kWh)
-                releasable_p = []
-                for vid in self.active_priority_queue:
-                    c_ev = connected.get(vid)
-                    if c_ev is not None:
-                        ok, surplus = self.check_safe_release(c_ev, current_time, reserve_override_kwh)
-                        if ok:
-                            releasable_p.append((surplus, c_ev.departure_time_idx, c_ev))
-                if releasable_p:
-                    releasable_p.sort(key=lambda x: (x[0], x[1]), reverse=True)
-                    _, _, rel_ev = releasable_p[0]
-                    del connected[rel_ev.id]
-                    if rel_ev.id in self.active_priority_queue:
-                        self.active_priority_queue.remove(rel_ev.id)
-                    rel_ev.safe_released = True
-                    rel_ev.is_priority = False
-                    events["safe_released_p"].append(rel_ev.id)
-                    connected[p_ev.id] = p_ev
-                    self.active_priority_queue.append(p_ev.id)
-                    self.q_act_entry_step[p_ev.id] = current_time
+            if safe_release:                                               # Tier 2
+                rel = []
+                for vid in self.q_act:
+                    ok, surplus = self.safe_release_ok(active[vid])
+                    if ok:
+                        rel.append((surplus, active[vid].departure_idx, vid))
+                if rel:
+                    _, _, vid = max(rel)
+                    v = active[vid]
+                    self.drop(vid)
+                    v.safe_released = True
+                    v.is_priority = False
+                    ev["safe_released"].append(vid)
+                    self._admit(p)
                     continue
-
-                # Tier 3: Guarded FIFO Rotation from Q_k^act (head of Q_k^act first)
-                rotated_victim = None
-                for vid in list(self.active_priority_queue):
-                    head_ev = connected.get(vid)
-                    if head_ev is None:
-                        continue
-                    # Guard condition: incoming priority EV is more urgent (pi_new > pi_head)
-                    # AND head_ev has positive slack (laxity > dt) or has already covered next_trip_kwh
-                    has_slack_or_trip = (head_ev.laxity > self.dt) or (head_ev.current_energy_kwh >= head_ev.next_trip_kwh + head_ev.reserve_kwh)
-                    if p_ev.atc_score > head_ev.atc_score * 1.02 and has_slack_or_trip:
-                        rotated_victim = head_ev
+            if rotation:                                                   # Tier 3 (simulated operator)
+                victim = None
+                for vid in list(self.q_act):
+                    h = active[vid]
+                    guard = (h.current_energy_kwh >= h.mission_level_kwh - 1e-6) or (h.laxity_h > self.dt)
+                    if p.atc_score > self.margin * h.atc_score and guard:
+                        victim = h
                         break
-
-                if rotated_victim is not None:
-                    del connected[rotated_victim.id]
-                    self.active_priority_queue.remove(rotated_victim.id)
-                    events["rotated_p"].append(rotated_victim.id)
-                    events["safe_released_p"].append(rotated_victim.id)
-                    connected[p_ev.id] = p_ev
-                    self.active_priority_queue.append(p_ev.id)
-                    self.q_act_entry_step[p_ev.id] = current_time
+                if victim is not None:
+                    self.drop(victim.id)
+                    victim.rotated_count += 1
+                    if victim.mission_remaining <= 1e-6:
+                        victim.is_priority = False
+                    ev["rotated"].append(victim.id)
+                    self._admit(p)
                     continue
+            if p.id not in self.open_escalations:                         # Tier 4
+                self.open_escalations.add(p.id)
+                ev["escalation_new"].append(p.id)
+            ev["waiting_priority"].append(p.id)
 
-            # Tier 4: Cannot disconnect without violating mission safety; hold in Q_k^p & escalate
-            events["escalated_p"].append(p_ev.id)
+        # close escalation episodes for EVs now connected, departed, or no longer priority
+        self.open_escalations = {vid for vid in self.open_escalations
+                                 if vid in active and vid not in self.connected and active[vid].is_priority}
 
-        # Fill any remaining open EVSE slots with Non-Priority EVs (Q_k^n) in FIFO order
-        non_priority_evs = [v for v in active_pool if not v.is_priority and v.id not in connected]
-        non_priority_evs.sort(key=lambda v: v.arrival_time_idx)
-        for np_ev in non_priority_evs:
-            if len(connected) >= self.num_chargers:
+        for v in sorted((v for v in active.values() if not v.is_priority and v.id not in self.connected),
+                        key=lambda v: (v.arrival_idx, v.id)):
+            if len(self.connected) >= self.M:
                 break
-            connected[np_ev.id] = np_ev
+            self.connected.add(v.id)
 
-        admitted = list(connected.values())
-        self.connected_ids = {v.id for v in admitted}
-        return admitted, events
+        return [active[vid] for vid in sorted(self.connected)], ev
+
+    def _admit(self, v: Vehicle):
+        self.connected.add(v.id)
+        if v.id not in self.q_act:
+            self.q_act.append(v.id)

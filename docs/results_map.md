@@ -1,11 +1,18 @@
-# AQPS Revision Results Map (`docs/results_map.md`)
+# Results map (revision v3)
 
-| Experiment ID | Manuscript Section | Figure / Table | Summary CSV Source | Post-Processing Function |
-| :--- | :--- | :--- | :--- | :--- |
-| **E1** (Main 8 Methods x S1-S3 x 2 Fleets) | §4.3 Main Results | Table 3 (Master Table), Fig. 3 (Fulfillment), Figs. 4-5 (Cumulative Cost), Figs. 6-7 (Per-EV Gantt), Fig. 8 (Cost Breakdown) | `results/E1_main/summary/e1_master_table.csv` | `generate_all_figures.py` |
-| **E2** (Scripted Operator Injections) | §4.4 Real-Time Queue Case Studies | Fig. 9 (Queue Trajectory with Injection Markers), Table 4 (Operator Impact Preview) | `results/E2_case_studies/summary/e2_case_studies.csv` | `generate_all_figures.py` |
-| **E3** (Random-Disruption Monte Carlo, 30 runs) | §4.5 Disruption Monte Carlo | Fig. 10 (Monte Carlo Fulfillment & Cost Box/CI Plot) | `results/E3_monte_carlo/summary/e3_mc_summary.csv` | `generate_all_figures.py` |
-| **E4** (Real AEMO VIC1 PV Forecast vs Actual) | §4.6 PV Forecast Uncertainty | Fig. 11 (AEMO VIC1 Profiles & Error Impact), Table 5 | `results/E4_aemo_pv/summary/e4_aemo_pv_results.csv` | `generate_all_figures.py` |
-| **E5 / E5b** (Event-Triggered vs Every-Step & Scalability) | §4.7 Computational Efficiency & Scalability | Fig. 12 (Solve Count & Time Reduction), Table 6 (Scalability 45/90/180 EVs & Ratios 2:1-4:1) | `results/E5_scalability/summary/e5a_event_trigger_comparison.csv`, `e5b_scalability_ratios.csv` | `generate_all_figures.py` |
-| **E6** (Hyperparameter Sensitivity) | §4.8 Sensitivity Analysis | Fig. 13 (4-Panel Sensitivity Plateau: $lpha_2, lpha_3, k, r$) | `results/E6_sensitivity/summary/e6_sensitivity.csv` | `generate_all_figures.py` |
-| **E7** (Overloaded Priority & Escalation) | §3.5 & §4.8 Feasibility Condition | Table 7 / Fig. 14 (Overloaded Priority Fulfilment, Safe Releases & Escalations) | `results/E7_overloaded/summary/e7_overloaded_priority.csv` | `generate_all_figures.py` |
+Each run writes `results/<EXP>/raw/<run_id>.json.gz` (not committed) and `results/<EXP>/summary/runs.csv`
+(committed, one row per run). Post-processing scripts (Step 2) aggregate these into paper tables and figures.
+
+| Exp | Content | Summary file(s) | Paper section | Figure / table (planned, simplified set) |
+|---|---|---|---|---|
+| E1 | 8 methods × S1–S3 × {45, 90} EVs (reference AEMO day) | `E1/summary/runs.csv` (+ traces in raw) | §4.3 | Table: master results (mission %, non-priority %, kWh, cost, $/kWh, solves); Fig: service (mission %, non-priority %); Fig: cost by tier with $/kWh; Fig: Gantt 90-EV S3 |
+| E2 | 4 scripted injections, 90-EV S2 | `E2/summary/runs.csv`, `E2/summary/previews.csv` | §4.4 | Table: case studies + one preview example; Fig: queue swimlane (case 1) |
+| E3 | 30 random-disruption seeds, 90-EV S2 | `E3/summary/runs.csv` | §4.5 | Table: mean ± 95 % CI |
+| E4 | 6 real AEMO days (nMAE percentiles) × {45, 90} EVs | `E4/summary/runs.csv` | §4.6 | Fig: (a) forecast vs actual (3 days), (b) $/kWh vs nMAE |
+| E5 | (a) RT vs RT-ET, (b) T_max sweep, (c) fleet / EV:EVSE ratio | `E5/summary/runs.csv` | §4.7 | Table: L2 solves, total solves, solve ms, outcome difference; scalability rows |
+| E6 | α3, α2, k_atc (congested), reserve, τ_pv, preemption slack δ | `E6/summary/runs.csv` | §4.8 | Fig: (a) α3, (b) reserve; others in a table |
+| E7 | Priority share 30–90 % (mid-day cohort), all online methods | `E7/summary/runs.csv` | §4.8 / §3.5 | Table: overload behaviour |
+
+Inputs recorded in each `manifest.json`: git commit, config hash and snapshot, solver and versions,
+SHA-256 of `data/aemo_vic1_selected_days.json`, `data/operator_injections.json`,
+`data/aemo_raw/checksums.csv` and the three `simulation_data_*EVs.json` files.
