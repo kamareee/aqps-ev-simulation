@@ -1,8 +1,8 @@
 {
   "experiment": "E4",
-  "git_commit": "7ae01c0f6e22476073edc702e62e7bc5bfc8cc0e",
+  "git_commit": "070d9e22bba106eedecb6be63459375830db9cb5",
   "git_dirty": false,
-  "config_sha256": "b8cbee4d8e64833c4c251b53fb789a47d4dbc4b3a7fc2d7e3608e6b574ae196e",
+  "config_sha256": "6c1a70f14198eed490f51c33f24a53e81a2df5fa9ebbd1daa3b0775d568dec6c",
   "config": {
     "time": {
       "step_minutes": 15,
@@ -137,7 +137,7 @@
       },
       "E3": {
         "fleet": 90,
-        "scenario": "S2_Contention",
+        "scenario": "S3_PeakStress",
         "seeds": [
           3000,
           3029
@@ -258,7 +258,7 @@
       },
       "E7": {
         "fleet": 45,
-        "scenario": "S2_Contention",
+        "scenario": "S3_PeakStress",
         "shares": [
           0.3,
           0.5,
@@ -276,7 +276,7 @@
       }
     }
   },
-  "run_started": "2026-10-16T10:00:02",
+  "run_started": "2026-10-16T11:35:57",
   "machine": {
     "os": "Windows-11-10.0.26200-SP0",
     "processor": "Intel64 Family 6 Model 189 Stepping 1, GenuineIntel",
@@ -303,5 +303,21 @@
     "scenarios": null,
     "methods": null,
     "n_seeds": null
-  }
+  },
+  "fresh": true,
+  "history": [
+    {
+      "git_commit": "7ae01c0f6e22476073edc702e62e7bc5bfc8cc0e",
+      "git_dirty": false,
+      "config_sha256": "b8cbee4d8e64833c4c251b53fb789a47d4dbc4b3a7fc2d7e3608e6b574ae196e",
+      "run_started": "2026-10-16T10:00:02",
+      "versions": {
+        "python": "3.12.12",
+        "numpy": "2.4.2",
+        "pandas": "3.0.0",
+        "cvxpy": "1.8.1",
+        "mosek": "11.2.6"
+      }
+    }
+  ]
 }

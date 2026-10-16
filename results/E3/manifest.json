@@ -1,6 +1,6 @@
 {
   "experiment": "E3",
-  "git_commit": "39672ef55bc85777f24759d1d4795aa4976ef4a5",
+  "git_commit": "070d9e22bba106eedecb6be63459375830db9cb5",
   "git_dirty": false,
   "config_sha256": "6c1a70f14198eed490f51c33f24a53e81a2df5fa9ebbd1daa3b0775d568dec6c",
   "config": {
@@ -276,7 +276,7 @@
       }
     }
   },
-  "run_started": "2026-10-16T10:32:29",
+  "run_started": "2026-10-16T11:33:38",
   "machine": {
     "os": "Windows-11-10.0.26200-SP0",
     "processor": "Intel64 Family 6 Model 189 Stepping 1, GenuineIntel",
@@ -304,5 +304,20 @@
     "methods": null,
     "n_seeds": null
   },
-  "history": []
+  "fresh": true,
+  "history": [
+    {
+      "git_commit": "39672ef55bc85777f24759d1d4795aa4976ef4a5",
+      "git_dirty": false,
+      "config_sha256": "6c1a70f14198eed490f51c33f24a53e81a2df5fa9ebbd1daa3b0775d568dec6c",
+      "run_started": "2026-10-16T10:32:29",
+      "versions": {
+        "python": "3.12.12",
+        "numpy": "2.4.2",
+        "pandas": "3.0.0",
+        "cvxpy": "1.8.1",
+        "mosek": "11.2.6"
+      }
+    }
+  ]
 }
