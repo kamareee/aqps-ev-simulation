@@ -19,7 +19,7 @@ SHA-256 of `data/aemo_vic1_selected_days.json`, `data/operator_injections.json`,
 
 ## Post-processing (Step 2)
 
-`python -m postprocess.build` regenerates everything below from committed files only
+`uv run --frozen python -m postprocess.build` (locked versions; figure bytes depend on the matplotlib version) regenerates everything below from committed files only
 (summaries, E1/E2 raw traces, AEMO day file, fleet JSONs, config). AQPS-v1 is excluded from all
 outputs (decision 2026-10-16); AQPS-RT appears in tables only.
 
