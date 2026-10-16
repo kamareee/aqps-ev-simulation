@@ -133,7 +133,7 @@ def simulate(method: str, records: List[Dict], env: Dict, fleet_size: int, n_evs
 
     agg = {"l0": 0, "l2": 0, "prev": 0, "l2_ms": [], "all_ms": 0.0, "soft": 0, "infeas": 0,
            "commit_inf": 0, "nonopt": 0, "pre": 0, "sr": 0, "rot": 0, "esc": 0, "extra_cost": 0.0,
-           "previews": [], "events": 0, "site_trims": 0, "site_trim_kw_max": 0.0}
+           "previews": [], "events": 0, "site_trims": 0, "site_trim_kw_max": 0.0, "unservable": 0}
     tr = {"gross": [], "net": [], "power": {}, "connected": [], "priority": [], "reasons": []} if trace else None
     offline_info = None
 
@@ -171,6 +171,9 @@ def simulate(method: str, records: List[Dict], env: Dict, fleet_size: int, n_evs
         if method != "Offline-Optimal":
             for inj in injections.get(t, []):
                 apply_injection(inj, vehicles, t, T, act)
+                if inj["type"] == "promotion":  # mission physically out of reach at promotion time
+                    v = vehicles[inj["id"]]
+                    agg["unservable"] += int(v.mission_remaining > v.p_max_kw * max(0, v.departure_idx - t) * dt + TOL_MISSION)
         present = [v for v in vehicles.values() if v.arrival_idx <= t < v.departure_idx]
         arrivals = [v.id for v in present if v.arrival_idx == t]
         departures = [v.id for v in vehicles.values() if v.departure_idx == t]
@@ -304,6 +307,7 @@ def summarise(method, vehicles, cfg, dt, T, cost, gross_tr, grid_kwh, pv_used, a
         "soft_solves": agg["soft"], "eq10_infeasible_first": agg["infeas"],
         "committed_infeasible": agg["commit_inf"], "nonoptimal_status": agg["nonopt"],
         "site_trims": agg["site_trims"], "site_trim_kw_max": round(agg["site_trim_kw_max"], 6),
+        "promoted_unservable": agg["unservable"],
         "solver": cfg["optimizer"]["solver"],
     }
     if offline_info is not None:
@@ -384,14 +388,14 @@ def write_manifest(exp_dir: str, exp: str, cfg: Dict, extra: Dict):
 
 
 class Runner:
-    def __init__(self, out_root: str, cfg: Dict):
-        self.out_root, self.cfg = out_root, cfg
+    def __init__(self, out_root: str, cfg: Dict, fresh: bool = False):
+        self.out_root, self.cfg, self.fresh = out_root, cfg, fresh  # fresh: ignore cached raw runs
 
     def run(self, exp: str, run_id: str, fn, meta: Dict, trace: bool = False):
         raw_dir = os.path.join(self.out_root, exp, "raw")
         os.makedirs(raw_dir, exist_ok=True)
         path = os.path.join(raw_dir, f"{run_id}.json.gz")
-        if os.path.exists(path):
+        if os.path.exists(path) and not self.fresh:
             with gzip.open(path, "rt") as f:
                 return json.load(f)
         t0 = time.perf_counter()
@@ -475,9 +479,13 @@ def disrupt(records: List[Dict], seed: int, dcfg: Dict, T: int):
         e["arrival_idx"] = int(np.clip(e["arrival_idx"] + sh, 0, T - 9))
         e["departure_idx"] = int(np.clip(e["departure_idx"] + sh, e["arrival_idx"] + 8, T - 1))
         e["evening_return_idx"] = int(np.clip(e["evening_return_idx"] + sh, e["departure_idx"], T - 1))
+        # energy deviation s scales the next-trip energy and the session target; E_mission is
+        # recomputed from the physical mission level so Eq. 10 and safe release (a) stay consistent
         s = float(rng.uniform(*dcfg["energy_scale"]))
-        e["e_session_kwh"] = round(e["e_session_kwh"] * s, 3)
-        e["e_mission_kwh"] = round(min(e["e_session_kwh"], e["e_mission_kwh"] * s), 3)
+        e["next_trip_kwh"] = round(e["next_trip_kwh"] * s, 3)
+        e["e_session_kwh"] = round(min(e["e_session_kwh"] * s, e["battery_cap_kwh"] - e["eod_soc_kwh"]), 3)
+        need = e["next_trip_kwh"] + e["return_kwh"] + e["reserve_kwh"] - e["eod_soc_kwh"]
+        e["e_mission_kwh"] = round(min(e["e_session_kwh"], max(0.0, need)), 3)
         if e["priority"] == "Low" and not e.get("overnight") and rng.random() < dcfg["promotion_prob"]:
             hi = max(e["arrival_idx"] + 1, e["departure_idx"] - 4)
             tp = int(rng.integers(e["arrival_idx"], hi))
@@ -616,6 +624,7 @@ def main():
     ap.add_argument("--solver")
     ap.add_argument("--out", default="results")
     ap.add_argument("--smoke", action="store_true", help="E1, 45 EVs, S2 only, all methods -> results_smoke/")
+    ap.add_argument("--fresh", action="store_true", help="recompute every run (ignore cached results/<EXP>/raw)")
     args = ap.parse_args()
 
     cfg = load_cfg()
@@ -630,10 +639,10 @@ def main():
         exps = exps if args.exp != ["all"] else ["E1"]
         sel = {"fleets": args.fleet or [45], "scenarios": args.scenario or ["S2_Contention"],
                "methods": args.methods, "n_seeds": args.n_seeds or 1}
-    R = Runner(out_root, cfg)
+    R = Runner(out_root, cfg, fresh=args.fresh)
     for exp in exps:
         print(f"=== {exp} ===")
-        write_manifest(os.path.join(out_root, exp), exp, cfg, {"selection": sel})
+        write_manifest(os.path.join(out_root, exp), exp, cfg, {"selection": sel, "fresh": args.fresh})
         EXPS[exp](R, cfg, sel)
 
 

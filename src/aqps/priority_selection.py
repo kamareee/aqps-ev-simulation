@@ -9,9 +9,10 @@ Candidates : present, not finished, not safely released, and roster_priority or 
 Committed  : connected priority EVs that still need mission energy. They are never demoted by
              Layer 0 (admitted EVs keep their guarantee); they are always part of the test set.
 Test       : hard-Eq.-10 Layer-2 QP over committed + the first (M - |committed|) new candidates
-             of the ATC-ranked prefix (exact for EVs that can be connected now), plus the
-             individual dwell-rate check  E_mission_rem <= xbar * (d - t) * dt  for every new
-             candidate in the prefix (necessary condition for queued EVs).
+             of the ATC-ranked prefix (exact for EVs that can be connected now).
+Dwell test : a new candidate whose mission cannot be delivered before departure even at full rate
+             (E_mission_rem > xbar * (d - t) * dt) is escalated directly and excluded from the
+             ranking, so it cannot block feasible candidates ranked behind it.
 Search     : full candidate set first (1 solve); bisection over the prefix length only if it fails.
 """
 
@@ -87,15 +88,16 @@ class PrioritySelector:
                      and v.mission_remaining > self.tol]
         met = [v for v in cands if v.is_priority and v.mission_remaining <= self.tol]
         new = [v for v in cands if v not in committed and v not in met and v.mission_remaining > self.tol]
+        hopeless = [v for v in new if not self._dwell_ok(v, t)]   # escalated directly
+        new = [v for v in new if self._dwell_ok(v, t)]
         new.sort(key=lambda v: (-scores.get(v.id, 0.0), v.arrival_idx, v.id))
+        hopeless.sort(key=lambda v: (-scores.get(v.id, 0.0), v.arrival_idx, v.id))
         slots = max(0, self.M - len(committed))
 
         res = L0Result(priority_ids=set(), escalated_ids=[], scores=scores)
 
         def feasible(q: int) -> bool:
             prefix = new[:q]
-            if not all(self._dwell_ok(v, t) for v in prefix):
-                return False
             ok, ms, solved = self._qp_feasible(committed + prefix[:slots], t, tou, pv, bess)
             res.solves += int(solved)
             res.solve_ms += ms
@@ -118,7 +120,7 @@ class PrioritySelector:
 
         chosen = {v.id for v in committed} | {v.id for v in met} | {v.id for v in new[:best]}
         res.priority_ids = chosen
-        res.escalated_ids = [v.id for v in new[best:]]
+        res.escalated_ids = [v.id for v in new[best:]] + [v.id for v in hopeless]
         for v in present:
             v.is_priority = v.id in chosen
         return res
