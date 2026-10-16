@@ -41,7 +41,7 @@ def fig3_service():
     metrics = [("mission_sufficiency_pct", "Mission sufficiency (%)"),
                ("nonpriority_fulfil_pct", "Non-priority energy\nfulfilment (%)")]
     fl = C.cfg()["fleets"]
-    fig, axes = plt.subplots(2, 2, figsize=(C.W2, 3.7), sharey=True)
+    fig, axes = plt.subplots(2, 2, figsize=(C.W2, 3.45), sharey=True)
     n = len(C.FIG_METHODS)
     w = 0.8 / n
     for j, size in enumerate([45, 90]):
@@ -69,7 +69,7 @@ def fig3_service():
 def fig4_cost_tiers():
     d = C.runs("E1")
     tiers = ["off_peak", "shoulder", "peak"]
-    fig, axes = plt.subplots(2, 2, figsize=(C.W2, 3.9))
+    fig, axes = plt.subplots(2, 2, figsize=(C.W2, 3.45))
     x = np.arange(len(C.FIG_METHODS))
     for i, s in enumerate(["S2_Contention", "S3_PeakStress"]):
         for j, size in enumerate([45, 90]):
@@ -295,7 +295,7 @@ def fig7_aemo():
     pick = [10, 50, 97.5]
     show = [next(dd for dd in days if dd["percentile"] == p) for p in pick]
     e4 = C.runs("E4")
-    fig = plt.figure(figsize=(C.W2, 3.6))
+    fig = plt.figure(figsize=(C.W2, 3.35))
     gs = fig.add_gridspec(2, 6, height_ratios=[1, 1.05], hspace=0.62, wspace=0.9)
     T = len(show[0]["pv_actual_kw"])
     hrs = C.step_to_hour(np.arange(T))
