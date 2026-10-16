@@ -22,6 +22,11 @@ def f(x, d=1):
     return "$-$" + t[1:] if t.startswith("-") else t
 
 
+def H(*lines):
+    """Stacked (multi-line) column header."""
+    return "\\begin{tabular}[b]{@{}c@{}}" + "\\\\".join(lines) + "\\end{tabular}"
+
+
 def pm(mean, half, d=1):
     return f"{f(mean, d)} $\\pm$ {f(half, d)}"
 
@@ -34,7 +39,7 @@ def write(name, body):
 
 
 def table(env, caption, label, colspec, header, rows, size="\\footnotesize", notes=None, colsep=None):
-    out = [f"\\begin{{{env}}}[!t]", "\\centering", size] + ([f"\\setlength{{\\tabcolsep}}{{{colsep}}}"] if colsep else []) + [ f"\\caption{{{caption}}}", f"\\label{{{label}}}",
+    out = [f"\\begin{{{env}}}[{'!t' if env.endswith('*') else '!htbp'}]", "\\centering", size] + ([f"\\setlength{{\\tabcolsep}}{{{colsep}}}"] if colsep else []) + [ f"\\caption{{{caption}}}", f"\\label{{{label}}}",
            f"\\begin{{tabular}}{{{colspec}}}", "\\toprule", header + " \\\\", "\\midrule"]
     out += rows
     out += ["\\bottomrule", "\\end{tabular}"]
@@ -72,34 +77,39 @@ def tab_scenarios():
         "table*", "Scenarios. Contention is defined before any run: peak number of vehicles present per EVSE, "
                   "and daytime energy demand over site capacity in the contention window.",
         "tab:scenarios", "rrrlrrrr",
-        "EVs & EVSEs & $P_\\mathrm{site}$ (kW) & Scenario & Priority share (\\%) & Peak present / EVSE & "
-        "Daytime energy / capacity & Session energy (kWh)", rows))
+        f"EVs & EVSEs & {H('$P_\\mathrm{site}$', '(kW)')} & Scenario & {H('Priority', 'share (\\%)')} & "
+        f"{H('Peak present', 'per EVSE')} & {H('Daytime energy', '/ capacity')} & {H('Session', 'energy (kWh)')}",
+        rows))
 
 
 # ----------------------------------------------------------------------------- E1
 def tab_e1_master():
+    """Compact (EPSR 7000-word limit): 45- and 90-EV depots side by side; AQPS-RT omitted (same outcomes as
+    AQPS-RT-ET, Table E5a)."""
     d = C.runs("E1")
     rows = []
-    for n in (45, 90):
-        for s in C.SCEN:
-            rows.append(f"\\multicolumn{{10}}{{l}}{{\\textit{{{n} EVs, {C.SCEN_LABEL[s]}}}}} \\\\")
-            for m in C.TAB_METHODS:
+    for s in C.SCEN:
+        rows.append(f"\\multicolumn{{11}}{{l}}{{\\textit{{{C.SCEN_LABEL[s]}}}}} \\\\")
+        for m in C.FIG_METHODS:
+            cells = []
+            for n in (45, 90):
                 r = d[(d.fleet_size == n) & (d.scenario == s) & (d.method == m)].iloc[0]
                 greedy = m in ("LLF", "EDF")
-                rows.append(
-                    f"\\quad {C.LABEL[m]} & {f(r.mission_sufficiency_pct)} & {f(r.priority_session_fulfil_pct)} & "
-                    f"{f(r.nonpriority_fulfil_pct)} & {f(r.nonpriority_fulfil_22h_pct)} & {f(r.energy_total_kwh, 0)} & "
-                    f"{f(r.cost_total, 0)} & {f(r.unit_cost_per_kwh, 3)} & {f(r.peak_kw, 0)} & "
-                    f"{'--' if greedy else int(r.total_solves)} \\\\")
-            if not (n == 90 and s == C.SCEN[-1]):
-                rows.append("\\addlinespace")
-    notes = ("Mission: priority vehicles reaching $E^\\mathrm{mission}$. Priority session and non-priority: delivered / "
-             "requested session energy. Non-pr. 22:00: same at 22:00. Solves: all optimiser solves (Layer 0, Layer 2, "
-             "preview); LLF and EDF use none. Offline-Opt. is a perfect-information MIQP bound (one solve).")
+                cells += [f(r.mission_sufficiency_pct), f(r.nonpriority_fulfil_pct), f(r.energy_total_kwh, 0),
+                          f(r.unit_cost_per_kwh, 3), "--" if greedy else str(int(r.total_solves))]
+            rows.append(f"\\quad {C.LABEL[m]} & " + " & ".join(cells) + " \\\\")
+        if s != C.SCEN[-1]:
+            rows.append("\\addlinespace")
+    one = (f"{H('Mission', '(\\%)')} & {H('Non-pr.', '(\\%)')} & {H('Energy', '(kWh)')} & "
+           f"{H('Unit cost', '(\\$/kWh)')} & Solves")
+    head = ("& \\multicolumn{5}{c}{45 EVs, 16 EVSEs, 150 kW} & \\multicolumn{5}{c}{90 EVs, 35 EVSEs, 300 kW} \\\\\n"
+            "\\cmidrule(lr){2-6}\\cmidrule(lr){7-11}\n"
+            f"Method & {one} & {one}")
+    notes = ("Mission: share of priority vehicles reaching $E^\\mathrm{mis}$. Non-pr.: delivered / requested "
+             "non-priority session energy. Solves: all optimiser solves. Offline-Opt.: perfect-information MIQP.")
     write("tab_e1_master", table(
-        "table*", "Main results on the reference AEMO day (E1).", "tab:e1", "lrrrrrrrrr",
-        "Method & Mission (\\%) & Priority session (\\%) & Non-pr. (\\%) & Non-pr. 22:00 (\\%) & Energy (kWh) & "
-        "Cost (\\$) & \\$/kWh & Peak (kW) & Solves", rows, notes=notes))
+        "table*", "Main results on the reference AEMO day (E1).", "tab:e1", "lrrrrrrrrrr", head, rows,
+        notes=notes, colsep="4pt"))
 
 
 # ----------------------------------------------------------------------------- E2
@@ -112,16 +122,15 @@ def tab_e2():
     meths = [m for m in C.TAB_METHODS if m in set(d.method)]
     rows = []
     for c, lab in CASE.items():
-        rows.append(f"\\multicolumn{{7}}{{l}}{{\\textit{{Case {lab}}}}} \\\\")
+        rows.append(f"\\multicolumn{{5}}{{l}}{{\\textit{{Case {lab}}}}} \\\\")
         for m in meths:
             r = d[(d.case == c) & (d.method == m)].iloc[0]
             rows.append(f"\\quad {C.LABEL[m]} & {f(r.mission_sufficiency_pct)} & {f(r.nonpriority_fulfil_pct)} & "
-                        f"{f(r.unit_cost_per_kwh, 3)} & {int(r.preemptions)} & {int(r.safe_releases)} & "
-                        f"{int(r.escalation_episodes)} \\\\")
+                        f"{int(r.safe_releases)} & {int(r.escalation_episodes)} \\\\")
     write("tab_e2_cases", table(
-        "table", "Scripted operator injections, 90 EVs, S2 (E2).", "tab:e2", "lrrrrrr",
-        "Method & Miss. (\\%) & Non-pr. (\\%) & \\$/kWh & Tier 1 & Tier 2 & Esc.", rows, colsep="4pt",
-        notes="Tier 1: non-priority preemptions; Tier 2: safe releases; Esc.: escalation episodes."))
+        "table", "Scripted operator injections, 90 EVs, S2 (E2).", "tab:e2", "lrrrr",
+        f"Method & {H('Mission', '(\\%)')} & {H('Non-pr.', '(\\%)')} & {H('Safe', 'releases')} & "
+        f"{H('Escalation', 'episodes')}", rows, colsep="4pt"))
 
     p = pd.read_csv(os.path.join(C.RES, "E2", "summary", "previews.csv"))
     p = p[p.case == "case_1_breakdown"]
@@ -130,7 +139,8 @@ def tab_e2():
             f"{f(r.horizon_cost, 2)} & {f(r.cost_delta, 2)} \\\\" for r in p.itertuples()]
     write("tab_e2_preview", table(
         "table", "Operator impact preview at the case-1 injection (AQPS-RT-ET).", "tab:preview", "lrrr",
-        "Option & Priority EVs & Horizon cost (\\$) & $\\Delta$ cost (\\$)", rows))
+        f"Option & {H('Priority', 'EVs')} & {H('Horizon', 'cost (\\$)')} & {H('$\\Delta$ cost', '(\\$)')}", rows,
+        colsep="4pt"))
 
 
 # ----------------------------------------------------------------------------- E3
@@ -148,7 +158,8 @@ def tab_e3():
     write("tab_e3_montecarlo", table(
         "table*", f"Random disruptions, 90 EVs, S3, {n} seeds (E3): mean $\\pm$ 95\\,\\% confidence half-width.",
         "tab:e3", "lrrrrrr",
-        "Method & Mission (\\%) & Non-pr. (\\%) & Non-pr. 22:00 (\\%) & Energy (kWh) & \\$/kWh & Seeds $<$100\\,\\% mission",
+        f"Method & {H('Mission', '(\\%)')} & {H('Non-pr.', '(\\%)')} & {H('Non-pr.', '22:00 (\\%)')} & "
+        f"{H('Energy', '(kWh)')} & {H('Unit cost', '(\\$/kWh)')} & {H('Seeds with', '$<$100\\,\\% mission')}",
         rows))
 
 
@@ -165,14 +176,12 @@ def tab_e5():
                 f"{n} & {SC[s]} & {int(rt.l2_solves)} / {int(et.l2_solves)} & "
                 f"{f(100 * (1 - et.l2_solves / rt.l2_solves), 0)} & {int(rt.total_solves)} / {int(et.total_solves)} & "
                 f"{f(100 * (1 - et.total_solves / rt.total_solves), 0)} & {f(et.l2_solve_ms_mean, 1)} / "
-                f"{f(et.l2_solve_ms_p95, 1)} & {f(et.mission_sufficiency_pct - rt.mission_sufficiency_pct, 2)} & "
-                f"{f(et.nonpriority_fulfil_pct - rt.nonpriority_fulfil_pct, 2)} & "
-                f"{f(1000 * (et.unit_cost_per_kwh - rt.unit_cost_per_kwh), 2)} \\\\")
+                f"{f(et.l2_solve_ms_p95, 1)} \\\\")
     write("tab_e5_et", table(
-        "table*", "Event-triggered (RT-ET) versus every-step (RT) re-optimisation (E5a). $\\Delta$ = RT-ET $-$ RT.",
-        "tab:e5a", "rlrrrrrrrr",
-        "EVs & Scen. & L2 solves RT / ET & Red. (\\%) & Total solves RT / ET & Red. (\\%) & ET L2 ms mean / p95 & "
-        "$\\Delta$ mission (pp) & $\\Delta$ non-pr. (pp) & $\\Delta$ \\$/MWh", rows))
+        "table", "Event-triggered (ET) versus every-step (RT) Layer 2 (E5a): solves per day and ET solve time.",
+        "tab:e5a", "rlrrrrr",
+        f"EVs & Scen. & {H('L2 solves', 'RT / ET')} & {H('Red.', '(\\%)')} & {H('All solves', 'RT / ET')} & "
+        f"{H('Red.', '(\\%)')} & {H('L2 ms', 'mean / p95')}", rows, colsep="3pt"))
 
     b = d[d.part == "b_tmax_sweep"].sort_values("t_max_steps")
     step = C.cfg()["time"]["step_minutes"]
@@ -180,7 +189,8 @@ def tab_e5():
             f"{f(r.unit_cost_per_kwh, 4)} \\\\" for r in b.itertuples()]
     write("tab_e5_tmax", table(
         "table", "Periodic re-solve interval $T_\\mathrm{max}$, 90 EVs, S2 (E5b).", "tab:e5b", "rrrrr",
-        "$T_\\mathrm{max}$ (min) & L2 solves & Total solves & Non-pr. (\\%) & \\$/kWh", rows))
+        f"{H('$T_\\mathrm{max}$', '(min)')} & {H('L2', 'solves')} & {H('All', 'solves')} & {H('Non-pr.', '(\\%)')} & "
+        f"{H('Unit cost', '(\\$/kWh)')}", rows))
 
     c = d[d.part == "c_scalability"]
     rows = []
@@ -189,20 +199,20 @@ def tab_e5():
             g = c[(c.fleet_size == n) & (c.ratio == ratio)].set_index("method")
             et = g.loc["AQPS-RT-ET"]
             cells = []
-            for m in ("LLF", "EDF", "AQPS-RT-ET"):
+            for m in ("LLF", "AQPS-RT-ET"):
                 r = g.loc[m]
-                cells += [f(r.mission_sufficiency_pct), f(r.nonpriority_fulfil_pct), f(r.unit_cost_per_kwh, 3)]
-            rows.append(f"{n} & {int(et.n_evse)} & {ratio}:1 & " + " & ".join(cells) +
-                        f" & {f(et.l2_solve_ms_mean, 1)} / {f(et.l2_solve_ms_p95, 1)} \\\\")
+                cells += [f(r.nonpriority_fulfil_pct), f(r.unit_cost_per_kwh, 3)]
+            rows.append(f"{n} & {ratio}:1 ({int(et.n_evse)}) & " + " & ".join(cells) +
+                        f" & {f(et.l2_solve_ms_mean, 0)} / {f(et.l2_solve_ms_p95, 0)} \\\\")
         if n != 180:
             rows.append("\\addlinespace")
-    head = ("\\multicolumn{3}{c}{} & \\multicolumn{3}{c}{LLF} & \\multicolumn{3}{c}{EDF} & "
-            "\\multicolumn{4}{c}{AQPS-RT-ET} \\\\\n\\cmidrule(lr){4-6}\\cmidrule(lr){7-9}\\cmidrule(lr){10-13}\n"
-            "EVs & EVSEs & EV:EVSE & Miss. & Non-pr. & \\$/kWh & Miss. & Non-pr. & \\$/kWh & Miss. & Non-pr. & \\$/kWh & "
-            "L2 ms mean / p95")
+    head = ("\\multicolumn{2}{c}{} & \\multicolumn{2}{c}{LLF} & \\multicolumn{3}{c}{AQPS-RT-ET} \\\\\n"
+            "\\cmidrule(lr){3-4}\\cmidrule(lr){5-7}\n"
+            f"EVs & {H('Ratio', '(EVSEs)')} & {H('Non-pr.', '(\\%)')} & {H('Unit cost', '(\\$/kWh)')} & {H('Non-pr.', '(\\%)')} & "
+            f"{H('Unit cost', '(\\$/kWh)')} & {H('L2 ms', 'mean / p95')}")
     write("tab_e5_scal", table(
-        "table*", "Fleet size and EV:EVSE ratio, S2 (E5c). Mission and non-priority in \\%.", "tab:e5c",
-        "rrrrrrrrrrrrr", head, rows))
+        "table", "Fleet size and EV:EVSE ratio, S2 (E5c). LLF and AQPS-RT-ET meet every mission in all nine "
+                 "configurations.", "tab:e5c", "rrrrrrr", head, rows, colsep="2.5pt"))
 
 
 # ----------------------------------------------------------------------------- E6
@@ -221,7 +231,8 @@ def tab_e6():
                         f"{f(r.unit_cost_per_kwh, 4)} & {int(r.preemptions)} & {int(r.escalation_episodes)} \\\\")
     write("tab_e6", table(
         "table", "Sensitivity, 90 EVs, S2, AQPS-RT-ET (E6); $\\alpha_3$ and $r$ in Fig.~\\ref{fig:sens}.", "tab:e6",
-        "lrrrrr", "Setting & Mission (\\%) & Non-pr. (\\%) & \\$/kWh & Preempt. & Escal.", rows))
+        "lrrrrr", f"Setting & {H('Mission', '(\\%)')} & {H('Non-pr.', '(\\%)')} & {H('Unit cost', '(\\$/kWh)')} & "
+        f"{H('Tier 1', 'preempt.')} & Escal.", rows, colsep="4pt"))
 
 
 # ----------------------------------------------------------------------------- E7

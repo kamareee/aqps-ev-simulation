@@ -41,7 +41,7 @@ def fig3_service():
     metrics = [("mission_sufficiency_pct", "Mission sufficiency (%)"),
                ("nonpriority_fulfil_pct", "Non-priority energy\nfulfilment (%)")]
     fl = C.cfg()["fleets"]
-    fig, axes = plt.subplots(2, 2, figsize=(C.W2, 3.7), sharey=True)
+    fig, axes = plt.subplots(2, 2, figsize=(C.W2, 3.45), sharey=True)
     n = len(C.FIG_METHODS)
     w = 0.8 / n
     for j, size in enumerate([45, 90]):
@@ -69,7 +69,7 @@ def fig3_service():
 def fig4_cost_tiers():
     d = C.runs("E1")
     tiers = ["off_peak", "shoulder", "peak"]
-    fig, axes = plt.subplots(2, 2, figsize=(C.W2, 3.9))
+    fig, axes = plt.subplots(2, 2, figsize=(C.W2, 3.45))
     x = np.arange(len(C.FIG_METHODS))
     for i, s in enumerate(["S2_Contention", "S3_PeakStress"]):
         for j, size in enumerate([45, 90]):
@@ -84,7 +84,8 @@ def fig4_cost_tiers():
             for xi, (tot, u) in enumerate(zip(bottom, sub["unit_cost_per_kwh"])):
                 ax.text(xi, tot + 0.02 * top, f"{u:.3f}", ha="center", va="bottom", fontsize=6.5, color=C.INK2)
             ax.set_xticks(x)
-            ax.set_xticklabels([C.LABEL[m] for m in C.FIG_METHODS] if i == 1 else [], rotation=0)
+            two_line = {"Offline-Optimal": "Offline-\nOpt.", "AQPS-static": "AQPS-\nstatic", "AQPS-RT-ET": "AQPS-\nRT-ET"}
+            ax.set_xticklabels([two_line.get(m, C.LABEL[m]) for m in C.FIG_METHODS] if i == 1 else [], rotation=0)
             ax.tick_params(axis="x", length=0)
             ax.set_ylim(0, top * 1.14)
             if j == 0:
@@ -98,7 +99,7 @@ def fig4_cost_tiers():
     handles.append(Patch(facecolor="none", edgecolor="none",
                          label="Number above bar: unit cost ($/kWh delivered)"))
     fig.legend(handles=handles, loc="upper center", ncol=4, bbox_to_anchor=(0.5, 1.0), columnspacing=1.5)
-    fig.subplots_adjust(left=0.085, right=0.995, top=0.885, bottom=0.07, hspace=0.16, wspace=0.12)
+    fig.subplots_adjust(left=0.085, right=0.995, top=0.885, bottom=0.095, hspace=0.16, wspace=0.12)
     C.save(fig, "fig4_cost_tiers")
 
 
@@ -250,7 +251,7 @@ def fig6_swimlane():
     h0 = 9.0
     h1 = float(np.ceil(C.step_to_hour(max(per[v]["departure_idx"] for v in sel)))) + 0.5
     h1 = min(h1, 21.0)
-    fig, ax = plt.subplots(figsize=(C.W2, 2.35))
+    fig, ax = plt.subplots(figsize=(C.W2, 2.6))
     for y, v in enumerate(sel):
         e = per[v]
         cum = np.cumsum(np.asarray(tr["power"].get(v, [0.0] * T)) * 0.25)
@@ -281,9 +282,9 @@ def fig6_swimlane():
     handles += [Line2D([], [], marker="v", linestyle="none", color="#eda100", markeredgecolor=C.INK,
                        markeredgewidth=0.5, markersize=5, label="Mission energy reached"),
                 Line2D([], [], marker="|", linestyle="none", color=C.INK, markersize=7, label="Departure")]
-    fig.legend(handles=handles, loc="upper center", ncol=7, bbox_to_anchor=(0.5, 1.0), columnspacing=1.0,
+    fig.legend(handles=handles, loc="upper center", ncol=4, bbox_to_anchor=(0.5, 1.0), columnspacing=1.2,
                handletextpad=0.4, fontsize=6.5)
-    fig.subplots_adjust(left=0.075, right=0.995, top=0.86, bottom=0.17)
+    fig.subplots_adjust(left=0.085, right=0.995, top=0.80, bottom=0.15)
     C.save(fig, "fig6_swimlane")
     return sel
 
@@ -294,7 +295,7 @@ def fig7_aemo():
     pick = [10, 50, 97.5]
     show = [next(dd for dd in days if dd["percentile"] == p) for p in pick]
     e4 = C.runs("E4")
-    fig = plt.figure(figsize=(C.W2, 3.6))
+    fig = plt.figure(figsize=(C.W2, 3.35))
     gs = fig.add_gridspec(2, 6, height_ratios=[1, 1.05], hspace=0.62, wspace=0.9)
     T = len(show[0]["pv_actual_kw"])
     hrs = C.step_to_hour(np.arange(T))
@@ -349,9 +350,9 @@ def fig8_sensitivity():
     panels = [
         (axes[0], a3.value, a3.unit_cost_per_kwh, r"$\alpha_3$", "Unit cost ($/kWh)", "(a)", True, base),
         (axes[1], a3.value, a3.nonpriority_fulfil_pct, r"$\alpha_3$", "Non-priority fulfilment (%)", "(b)", True, base),
-        (axes[2], 100 * rs.value, rs.mission_sufficiency_pct, "Reserve $r$ (% of capacity)", "Mission sufficiency (%)",
+        (axes[2], 100 * rs.value, rs.mission_sufficiency_pct, "Reserve $r$ (% of $C_i$)", "Mission sufficiency (%)",
          "(c)", False, 10),
-        (axes[3], 100 * rs.value, rs.unit_cost_per_kwh, "Reserve $r$ (% of capacity)", "Unit cost ($/kWh)", "(d)",
+        (axes[3], 100 * rs.value, rs.unit_cost_per_kwh, "Reserve $r$ (% of $C_i$)", "Unit cost ($/kWh)", "(d)",
          False, 10),
     ]
     for ax, x, y, xl, yl, tag, logx, b in panels:
@@ -372,8 +373,7 @@ def fig8_sensitivity():
         half = max(rng * 0.65, 0.004 * abs(mid) if "cost" in yl.lower() else 1.0)
         ax.set_ylim(mid - half, mid + half)
     axes[2].set_ylim(min(axes[2].get_ylim()[0], 90), 101)
-    fig.text(0.995, 0.97, "dashed line: default setting", ha="right", va="top", fontsize=6.5, color=C.INK2)
-    fig.subplots_adjust(left=0.085, right=0.995, top=0.88, bottom=0.25, wspace=0.75)
+    fig.subplots_adjust(left=0.085, right=0.99, top=0.9, bottom=0.25, wspace=0.75)
     C.save(fig, "fig8_sensitivity")
 
 

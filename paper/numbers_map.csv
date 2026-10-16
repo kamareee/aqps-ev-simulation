@@ -2,129 +2,173 @@ macro,value,unit,source,expression
 \RMissionLLFSOneFortyFive,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=45, scenario=S1_Baseline, method=LLF]"
 \RNonPriLLFSOneFortyFive,100.0,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=45, scenario=S1_Baseline, method=LLF]"
 \RUnitCostLLFSOneFortyFive,0.241,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=45, scenario=S1_Baseline, method=LLF]"
+\RNonPriTwoTwoLLFSOneFortyFive,100.0,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=45, scenario=S1_Baseline, method=LLF]"
 \RMissionEDFSOneFortyFive,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=45, scenario=S1_Baseline, method=EDF]"
 \RNonPriEDFSOneFortyFive,100.0,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=45, scenario=S1_Baseline, method=EDF]"
 \RUnitCostEDFSOneFortyFive,0.241,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=45, scenario=S1_Baseline, method=EDF]"
+\RNonPriTwoTwoEDFSOneFortyFive,100.0,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=45, scenario=S1_Baseline, method=EDF]"
 \RMissionMPCSOneFortyFive,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=45, scenario=S1_Baseline, method=MPC-only]"
 \RNonPriMPCSOneFortyFive,98.0,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=45, scenario=S1_Baseline, method=MPC-only]"
 \RUnitCostMPCSOneFortyFive,0.193,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=45, scenario=S1_Baseline, method=MPC-only]"
+\RNonPriTwoTwoMPCSOneFortyFive,40.1,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=45, scenario=S1_Baseline, method=MPC-only]"
 \RMissionOfflineSOneFortyFive,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=45, scenario=S1_Baseline, method=Offline-Optimal]"
 \RNonPriOfflineSOneFortyFive,100.0,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=45, scenario=S1_Baseline, method=Offline-Optimal]"
 \RUnitCostOfflineSOneFortyFive,0.183,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=45, scenario=S1_Baseline, method=Offline-Optimal]"
+\RNonPriTwoTwoOfflineSOneFortyFive,40.4,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=45, scenario=S1_Baseline, method=Offline-Optimal]"
 \RMissionStaticSOneFortyFive,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=45, scenario=S1_Baseline, method=AQPS-static]"
 \RNonPriStaticSOneFortyFive,98.0,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=45, scenario=S1_Baseline, method=AQPS-static]"
 \RUnitCostStaticSOneFortyFive,0.194,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=45, scenario=S1_Baseline, method=AQPS-static]"
+\RNonPriTwoTwoStaticSOneFortyFive,40.1,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=45, scenario=S1_Baseline, method=AQPS-static]"
 \RMissionRTSOneFortyFive,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=45, scenario=S1_Baseline, method=AQPS-RT]"
 \RNonPriRTSOneFortyFive,98.0,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=45, scenario=S1_Baseline, method=AQPS-RT]"
 \RUnitCostRTSOneFortyFive,0.194,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=45, scenario=S1_Baseline, method=AQPS-RT]"
+\RNonPriTwoTwoRTSOneFortyFive,40.1,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=45, scenario=S1_Baseline, method=AQPS-RT]"
 \RMissionRTETSOneFortyFive,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=45, scenario=S1_Baseline, method=AQPS-RT-ET]"
 \RNonPriRTETSOneFortyFive,98.0,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=45, scenario=S1_Baseline, method=AQPS-RT-ET]"
 \RUnitCostRTETSOneFortyFive,0.194,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=45, scenario=S1_Baseline, method=AQPS-RT-ET]"
+\RNonPriTwoTwoRTETSOneFortyFive,40.1,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=45, scenario=S1_Baseline, method=AQPS-RT-ET]"
 \RMissionLLFSTwoFortyFive,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=45, scenario=S2_Contention, method=LLF]"
 \RNonPriLLFSTwoFortyFive,99.4,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=45, scenario=S2_Contention, method=LLF]"
 \RUnitCostLLFSTwoFortyFive,0.242,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=45, scenario=S2_Contention, method=LLF]"
+\RNonPriTwoTwoLLFSTwoFortyFive,99.4,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=45, scenario=S2_Contention, method=LLF]"
 \RMissionEDFSTwoFortyFive,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=45, scenario=S2_Contention, method=EDF]"
 \RNonPriEDFSTwoFortyFive,97.0,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=45, scenario=S2_Contention, method=EDF]"
 \RUnitCostEDFSTwoFortyFive,0.242,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=45, scenario=S2_Contention, method=EDF]"
+\RNonPriTwoTwoEDFSTwoFortyFive,97.0,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=45, scenario=S2_Contention, method=EDF]"
 \RMissionMPCSTwoFortyFive,86.4,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=45, scenario=S2_Contention, method=MPC-only]"
 \RNonPriMPCSTwoFortyFive,91.5,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=45, scenario=S2_Contention, method=MPC-only]"
 \RUnitCostMPCSTwoFortyFive,0.234,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=45, scenario=S2_Contention, method=MPC-only]"
+\RNonPriTwoTwoMPCSTwoFortyFive,81.8,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=45, scenario=S2_Contention, method=MPC-only]"
 \RMissionOfflineSTwoFortyFive,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=45, scenario=S2_Contention, method=Offline-Optimal]"
 \RNonPriOfflineSTwoFortyFive,99.3,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=45, scenario=S2_Contention, method=Offline-Optimal]"
 \RUnitCostOfflineSTwoFortyFive,0.233,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=45, scenario=S2_Contention, method=Offline-Optimal]"
+\RNonPriTwoTwoOfflineSTwoFortyFive,89.6,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=45, scenario=S2_Contention, method=Offline-Optimal]"
 \RMissionStaticSTwoFortyFive,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=45, scenario=S2_Contention, method=AQPS-static]"
 \RNonPriStaticSTwoFortyFive,83.1,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=45, scenario=S2_Contention, method=AQPS-static]"
 \RUnitCostStaticSTwoFortyFive,0.231,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=45, scenario=S2_Contention, method=AQPS-static]"
+\RNonPriTwoTwoStaticSTwoFortyFive,73.4,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=45, scenario=S2_Contention, method=AQPS-static]"
 \RMissionRTSTwoFortyFive,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=45, scenario=S2_Contention, method=AQPS-RT]"
 \RNonPriRTSTwoFortyFive,85.8,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=45, scenario=S2_Contention, method=AQPS-RT]"
 \RUnitCostRTSTwoFortyFive,0.233,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=45, scenario=S2_Contention, method=AQPS-RT]"
+\RNonPriTwoTwoRTSTwoFortyFive,76.1,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=45, scenario=S2_Contention, method=AQPS-RT]"
 \RMissionRTETSTwoFortyFive,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=45, scenario=S2_Contention, method=AQPS-RT-ET]"
 \RNonPriRTETSTwoFortyFive,85.8,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=45, scenario=S2_Contention, method=AQPS-RT-ET]"
 \RUnitCostRTETSTwoFortyFive,0.233,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=45, scenario=S2_Contention, method=AQPS-RT-ET]"
+\RNonPriTwoTwoRTETSTwoFortyFive,76.1,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=45, scenario=S2_Contention, method=AQPS-RT-ET]"
 \RMissionLLFSThreeFortyFive,27.3,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=45, scenario=S3_PeakStress, method=LLF]"
 \RNonPriLLFSThreeFortyFive,95.9,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=45, scenario=S3_PeakStress, method=LLF]"
 \RUnitCostLLFSThreeFortyFive,0.260,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=45, scenario=S3_PeakStress, method=LLF]"
+\RNonPriTwoTwoLLFSThreeFortyFive,81.4,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=45, scenario=S3_PeakStress, method=LLF]"
 \RMissionEDFSThreeFortyFive,40.9,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=45, scenario=S3_PeakStress, method=EDF]"
 \RNonPriEDFSThreeFortyFive,96.2,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=45, scenario=S3_PeakStress, method=EDF]"
 \RUnitCostEDFSThreeFortyFive,0.260,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=45, scenario=S3_PeakStress, method=EDF]"
+\RNonPriTwoTwoEDFSThreeFortyFive,81.7,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=45, scenario=S3_PeakStress, method=EDF]"
 \RMissionMPCSThreeFortyFive,45.5,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=45, scenario=S3_PeakStress, method=MPC-only]"
 \RNonPriMPCSThreeFortyFive,94.7,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=45, scenario=S3_PeakStress, method=MPC-only]"
 \RUnitCostMPCSThreeFortyFive,0.258,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=45, scenario=S3_PeakStress, method=MPC-only]"
+\RNonPriTwoTwoMPCSThreeFortyFive,80.1,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=45, scenario=S3_PeakStress, method=MPC-only]"
 \RMissionOfflineSThreeFortyFive,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=45, scenario=S3_PeakStress, method=Offline-Optimal]"
 \RNonPriOfflineSThreeFortyFive,82.5,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=45, scenario=S3_PeakStress, method=Offline-Optimal]"
 \RUnitCostOfflineSThreeFortyFive,0.260,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=45, scenario=S3_PeakStress, method=Offline-Optimal]"
+\RNonPriTwoTwoOfflineSThreeFortyFive,67.9,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=45, scenario=S3_PeakStress, method=Offline-Optimal]"
 \RMissionStaticSThreeFortyFive,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=45, scenario=S3_PeakStress, method=AQPS-static]"
 \RNonPriStaticSThreeFortyFive,76.7,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=45, scenario=S3_PeakStress, method=AQPS-static]"
 \RUnitCostStaticSThreeFortyFive,0.257,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=45, scenario=S3_PeakStress, method=AQPS-static]"
+\RNonPriTwoTwoStaticSThreeFortyFive,62.1,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=45, scenario=S3_PeakStress, method=AQPS-static]"
 \RMissionRTSThreeFortyFive,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=45, scenario=S3_PeakStress, method=AQPS-RT]"
 \RNonPriRTSThreeFortyFive,78.0,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=45, scenario=S3_PeakStress, method=AQPS-RT]"
 \RUnitCostRTSThreeFortyFive,0.257,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=45, scenario=S3_PeakStress, method=AQPS-RT]"
+\RNonPriTwoTwoRTSThreeFortyFive,63.4,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=45, scenario=S3_PeakStress, method=AQPS-RT]"
 \RMissionRTETSThreeFortyFive,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=45, scenario=S3_PeakStress, method=AQPS-RT-ET]"
 \RNonPriRTETSThreeFortyFive,78.0,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=45, scenario=S3_PeakStress, method=AQPS-RT-ET]"
 \RUnitCostRTETSThreeFortyFive,0.257,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=45, scenario=S3_PeakStress, method=AQPS-RT-ET]"
+\RNonPriTwoTwoRTETSThreeFortyFive,63.4,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=45, scenario=S3_PeakStress, method=AQPS-RT-ET]"
 \RMissionLLFSOneNinety,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=90, scenario=S1_Baseline, method=LLF]"
 \RNonPriLLFSOneNinety,100.0,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=90, scenario=S1_Baseline, method=LLF]"
 \RUnitCostLLFSOneNinety,0.251,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=90, scenario=S1_Baseline, method=LLF]"
+\RNonPriTwoTwoLLFSOneNinety,100.0,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=90, scenario=S1_Baseline, method=LLF]"
 \RMissionEDFSOneNinety,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=90, scenario=S1_Baseline, method=EDF]"
 \RNonPriEDFSOneNinety,100.0,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=90, scenario=S1_Baseline, method=EDF]"
 \RUnitCostEDFSOneNinety,0.251,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=90, scenario=S1_Baseline, method=EDF]"
+\RNonPriTwoTwoEDFSOneNinety,100.0,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=90, scenario=S1_Baseline, method=EDF]"
 \RMissionMPCSOneNinety,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=90, scenario=S1_Baseline, method=MPC-only]"
 \RNonPriMPCSOneNinety,100.0,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=90, scenario=S1_Baseline, method=MPC-only]"
 \RUnitCostMPCSOneNinety,0.198,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=90, scenario=S1_Baseline, method=MPC-only]"
+\RNonPriTwoTwoMPCSOneNinety,43.5,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=90, scenario=S1_Baseline, method=MPC-only]"
 \RMissionOfflineSOneNinety,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=90, scenario=S1_Baseline, method=Offline-Optimal]"
 \RNonPriOfflineSOneNinety,100.0,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=90, scenario=S1_Baseline, method=Offline-Optimal]"
 \RUnitCostOfflineSOneNinety,0.191,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=90, scenario=S1_Baseline, method=Offline-Optimal]"
+\RNonPriTwoTwoOfflineSOneNinety,43.7,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=90, scenario=S1_Baseline, method=Offline-Optimal]"
 \RMissionStaticSOneNinety,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=90, scenario=S1_Baseline, method=AQPS-static]"
 \RNonPriStaticSOneNinety,100.0,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=90, scenario=S1_Baseline, method=AQPS-static]"
 \RUnitCostStaticSOneNinety,0.202,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=90, scenario=S1_Baseline, method=AQPS-static]"
+\RNonPriTwoTwoStaticSOneNinety,43.6,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=90, scenario=S1_Baseline, method=AQPS-static]"
 \RMissionRTSOneNinety,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=90, scenario=S1_Baseline, method=AQPS-RT]"
 \RNonPriRTSOneNinety,100.0,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=90, scenario=S1_Baseline, method=AQPS-RT]"
 \RUnitCostRTSOneNinety,0.202,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=90, scenario=S1_Baseline, method=AQPS-RT]"
+\RNonPriTwoTwoRTSOneNinety,43.6,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=90, scenario=S1_Baseline, method=AQPS-RT]"
 \RMissionRTETSOneNinety,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=90, scenario=S1_Baseline, method=AQPS-RT-ET]"
 \RNonPriRTETSOneNinety,100.0,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=90, scenario=S1_Baseline, method=AQPS-RT-ET]"
 \RUnitCostRTETSOneNinety,0.202,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=90, scenario=S1_Baseline, method=AQPS-RT-ET]"
+\RNonPriTwoTwoRTETSOneNinety,43.6,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=90, scenario=S1_Baseline, method=AQPS-RT-ET]"
 \RMissionLLFSTwoNinety,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=90, scenario=S2_Contention, method=LLF]"
 \RNonPriLLFSTwoNinety,100.0,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=90, scenario=S2_Contention, method=LLF]"
 \RUnitCostLLFSTwoNinety,0.245,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=90, scenario=S2_Contention, method=LLF]"
+\RNonPriTwoTwoLLFSTwoNinety,100.0,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=90, scenario=S2_Contention, method=LLF]"
 \RMissionEDFSTwoNinety,97.8,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=90, scenario=S2_Contention, method=EDF]"
 \RNonPriEDFSTwoNinety,98.5,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=90, scenario=S2_Contention, method=EDF]"
 \RUnitCostEDFSTwoNinety,0.245,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=90, scenario=S2_Contention, method=EDF]"
+\RNonPriTwoTwoEDFSTwoNinety,98.5,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=90, scenario=S2_Contention, method=EDF]"
 \RMissionMPCSTwoNinety,82.2,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=90, scenario=S2_Contention, method=MPC-only]"
 \RNonPriMPCSTwoNinety,95.0,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=90, scenario=S2_Contention, method=MPC-only]"
 \RUnitCostMPCSTwoNinety,0.238,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=90, scenario=S2_Contention, method=MPC-only]"
+\RNonPriTwoTwoMPCSTwoNinety,84.7,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=90, scenario=S2_Contention, method=MPC-only]"
 \RMissionOfflineSTwoNinety,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=90, scenario=S2_Contention, method=Offline-Optimal]"
 \RNonPriOfflineSTwoNinety,98.0,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=90, scenario=S2_Contention, method=Offline-Optimal]"
 \RUnitCostOfflineSTwoNinety,0.237,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=90, scenario=S2_Contention, method=Offline-Optimal]"
+\RNonPriTwoTwoOfflineSTwoNinety,87.7,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=90, scenario=S2_Contention, method=Offline-Optimal]"
 \RMissionStaticSTwoNinety,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=90, scenario=S2_Contention, method=AQPS-static]"
 \RNonPriStaticSTwoNinety,85.4,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=90, scenario=S2_Contention, method=AQPS-static]"
 \RUnitCostStaticSTwoNinety,0.237,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=90, scenario=S2_Contention, method=AQPS-static]"
+\RNonPriTwoTwoStaticSTwoNinety,75.0,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=90, scenario=S2_Contention, method=AQPS-static]"
 \RMissionRTSTwoNinety,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=90, scenario=S2_Contention, method=AQPS-RT]"
 \RNonPriRTSTwoNinety,87.6,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=90, scenario=S2_Contention, method=AQPS-RT]"
 \RUnitCostRTSTwoNinety,0.238,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=90, scenario=S2_Contention, method=AQPS-RT]"
+\RNonPriTwoTwoRTSTwoNinety,77.3,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=90, scenario=S2_Contention, method=AQPS-RT]"
 \RMissionRTETSTwoNinety,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=90, scenario=S2_Contention, method=AQPS-RT-ET]"
 \RNonPriRTETSTwoNinety,87.6,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=90, scenario=S2_Contention, method=AQPS-RT-ET]"
 \RUnitCostRTETSTwoNinety,0.238,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=90, scenario=S2_Contention, method=AQPS-RT-ET]"
+\RNonPriTwoTwoRTETSTwoNinety,77.3,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=90, scenario=S2_Contention, method=AQPS-RT-ET]"
 \RMissionLLFSThreeNinety,26.7,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=90, scenario=S3_PeakStress, method=LLF]"
 \RNonPriLLFSThreeNinety,93.9,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=90, scenario=S3_PeakStress, method=LLF]"
 \RUnitCostLLFSThreeNinety,0.263,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=90, scenario=S3_PeakStress, method=LLF]"
+\RNonPriTwoTwoLLFSThreeNinety,81.2,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=90, scenario=S3_PeakStress, method=LLF]"
 \RMissionEDFSThreeNinety,42.2,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=90, scenario=S3_PeakStress, method=EDF]"
 \RNonPriEDFSThreeNinety,93.9,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=90, scenario=S3_PeakStress, method=EDF]"
 \RUnitCostEDFSThreeNinety,0.263,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=90, scenario=S3_PeakStress, method=EDF]"
+\RNonPriTwoTwoEDFSThreeNinety,81.2,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=90, scenario=S3_PeakStress, method=EDF]"
 \RMissionMPCSThreeNinety,66.7,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=90, scenario=S3_PeakStress, method=MPC-only]"
 \RNonPriMPCSThreeNinety,85.6,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=90, scenario=S3_PeakStress, method=MPC-only]"
 \RUnitCostMPCSThreeNinety,0.262,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=90, scenario=S3_PeakStress, method=MPC-only]"
+\RNonPriTwoTwoMPCSThreeNinety,72.9,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=90, scenario=S3_PeakStress, method=MPC-only]"
 \RMissionOfflineSThreeNinety,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=90, scenario=S3_PeakStress, method=Offline-Optimal]"
 \RNonPriOfflineSThreeNinety,80.6,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=90, scenario=S3_PeakStress, method=Offline-Optimal]"
 \RUnitCostOfflineSThreeNinety,0.263,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=90, scenario=S3_PeakStress, method=Offline-Optimal]"
+\RNonPriTwoTwoOfflineSThreeNinety,68.0,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=90, scenario=S3_PeakStress, method=Offline-Optimal]"
 \RMissionStaticSThreeNinety,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=90, scenario=S3_PeakStress, method=AQPS-static]"
 \RNonPriStaticSThreeNinety,74.6,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=90, scenario=S3_PeakStress, method=AQPS-static]"
 \RUnitCostStaticSThreeNinety,0.263,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=90, scenario=S3_PeakStress, method=AQPS-static]"
+\RNonPriTwoTwoStaticSThreeNinety,61.9,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=90, scenario=S3_PeakStress, method=AQPS-static]"
 \RMissionRTSThreeNinety,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=90, scenario=S3_PeakStress, method=AQPS-RT]"
 \RNonPriRTSThreeNinety,76.4,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=90, scenario=S3_PeakStress, method=AQPS-RT]"
 \RUnitCostRTSThreeNinety,0.263,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=90, scenario=S3_PeakStress, method=AQPS-RT]"
+\RNonPriTwoTwoRTSThreeNinety,63.7,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=90, scenario=S3_PeakStress, method=AQPS-RT]"
 \RMissionRTETSThreeNinety,100.0,%,results/E1/summary/runs.csv,"mission_sufficiency_pct [fleet_size=90, scenario=S3_PeakStress, method=AQPS-RT-ET]"
 \RNonPriRTETSThreeNinety,76.4,%,results/E1/summary/runs.csv,"nonpriority_fulfil_pct [fleet_size=90, scenario=S3_PeakStress, method=AQPS-RT-ET]"
 \RUnitCostRTETSThreeNinety,0.263,$/kWh,results/E1/summary/runs.csv,"unit_cost_per_kwh [fleet_size=90, scenario=S3_PeakStress, method=AQPS-RT-ET]"
+\RNonPriTwoTwoRTETSThreeNinety,63.7,%,results/E1/summary/runs.csv,"nonpriority_fulfil_22h_pct [fleet_size=90, scenario=S3_PeakStress, method=AQPS-RT-ET]"
+\RSThreeOfflineGapMin,4.2,pp,results/E1/summary/runs.csv,min over fleets of nonpriority_fulfil_pct Offline-Optimal - AQPS-RT-ET [S3_PeakStress]
+\RSThreeOfflineGapMax,4.5,pp,results/E1/summary/runs.csv,max over fleets of nonpriority_fulfil_pct Offline-Optimal - AQPS-RT-ET [S3_PeakStress]
 \ROfflineGapMax,0.0035,%,results/E1/summary/runs.csv,100*max(offline_mip_gap_bound) [method=Offline-Optimal]
 \ROfflineSolveMaxS,20,s,results/E1/summary/runs.csv,max(wall_s) [method=Offline-Optimal]
 \RUnitSaveMinSOne,19.4,%,results/E1/summary/runs.csv,min over fleets of 100*(1 - $/kWh RT-ET / LLF) [S1_Baseline]
@@ -133,12 +177,19 @@ macro,value,unit,source,expression
 \RUnitSaveMaxSTwo,3.8,%,results/E1/summary/runs.csv,max over fleets of 100*(1 - $/kWh RT-ET / LLF) [S2_Contention]
 \RUnitSaveMinSThree,0.2,%,results/E1/summary/runs.csv,min over fleets of 100*(1 - $/kWh RT-ET / LLF) [S3_PeakStress]
 \RUnitSaveMaxSThree,1.1,%,results/E1/summary/runs.csv,max over fleets of 100*(1 - $/kWh RT-ET / LLF) [S3_PeakStress]
+\RGanttShortMin,7.7,kWh,"results/E1/raw/{AQPS-RT-ET,LLF}_S3_PeakStress_90EV.json.gz",min LLF mission shortfall of the Fig. 5 priority EVs
+\RGanttShortMax,9.3,kWh,"results/E1/raw/{AQPS-RT-ET,LLF}_S3_PeakStress_90EV.json.gz",max LLF mission shortfall of the Fig. 5 priority EVs
+\RGanttNPAqpsMin,56,%,"results/E1/raw/{AQPS-RT-ET,LLF}_S3_PeakStress_90EV.json.gz",min session % of the Fig. 5 non-priority EVs (Aqps)
+\RGanttNPAqpsMax,90,%,"results/E1/raw/{AQPS-RT-ET,LLF}_S3_PeakStress_90EV.json.gz",max session % of the Fig. 5 non-priority EVs (Aqps)
+\RGanttNPLLFMin,86,%,"results/E1/raw/{AQPS-RT-ET,LLF}_S3_PeakStress_90EV.json.gz",min session % of the Fig. 5 non-priority EVs (LLF)
+\RGanttNPLLFMax,100,%,"results/E1/raw/{AQPS-RT-ET,LLF}_S3_PeakStress_90EV.json.gz",max session % of the Fig. 5 non-priority EVs (LLF)
 \RCaseOneMissionLLF,100.0,%,results/E2/summary/runs.csv,"mission_sufficiency_pct [case=case_1_breakdown, method=LLF]"
 \RCaseOneMissionEDF,97.8,%,results/E2/summary/runs.csv,"mission_sufficiency_pct [case=case_1_breakdown, method=EDF]"
 \RCaseOneMissionStatic,97.8,%,results/E2/summary/runs.csv,"mission_sufficiency_pct [case=case_1_breakdown, method=AQPS-static]"
 \RCaseOneMissionRTET,100.0,%,results/E2/summary/runs.csv,"mission_sufficiency_pct [case=case_1_breakdown, method=AQPS-RT-ET]"
 \RCaseOneDowngradeDelta,0.58,$,results/E2/summary/previews.csv,"cost_delta [case=case_1_breakdown, option=downgrade]"
 \REThreeSeeds,30,,results/E3/summary/runs.csv,number of seeds
+\REThreeUnitSpreadPct,1.0,%,results/E3/summary/runs.csv,100*(max/min - 1) of per-method mean unit_cost_per_kwh
 \REThreeMissionLLF,45.5,,results/E3/summary/runs.csv,mean mission_sufficiency_pct [method=LLF]
 \REThreeMissionCILLF,3.4,,results/E3/summary/runs.csv,95% t half-width mission_sufficiency_pct [method=LLF]
 \REThreeNonPriLLF,95.3,,results/E3/summary/runs.csv,mean nonpriority_fulfil_pct [method=LLF]
@@ -177,13 +228,29 @@ macro,value,unit,source,expression
 \RNmaeMin,1.3,%,data/aemo_vic1_selected_days.json,min nmae_pct over the 6 selected days
 \RNmaeMax,9.6,%,data/aemo_vic1_selected_days.json,max nmae_pct over the 6 selected days
 \RCandidateDays,257,,data/aemo_vic1_selected_days.json,metadata.n_candidate_weekdays
+\RPVNormMW,"3{,}671",MW,data/aemo_vic1_selected_days.json,metadata.normalisation_max_mw
+\RPVRefDate,2024-08-01,,data/aemo_vic1_selected_days.json,date of the reference (50th percentile) day
+\RPVRefNmae,2.9,%,data/aemo_vic1_selected_days.json,nmae_pct of the reference day
+\RPVOverForecastPct,71,%,data/aemo_vic1_selected_days.json,100*(forecast/actual - 1) of day-D energy on the highest-percentile day
+\REFourSaveMinFortyFive,3.8,%,results/E4/summary/runs.csv,min over days of 100*(1 - $/kWh RT-ET / LLF) [fleet=45]
+\REFourSaveMaxFortyFive,5.0,%,results/E4/summary/runs.csv,max over days of 100*(1 - $/kWh RT-ET / LLF) [fleet=45]
+\REFourSaveMinNinety,3.1,%,results/E4/summary/runs.csv,min over days of 100*(1 - $/kWh RT-ET / LLF) [fleet=90]
+\REFourSaveMaxNinety,3.6,%,results/E4/summary/runs.csv,max over days of 100*(1 - $/kWh RT-ET / LLF) [fleet=90]
 \RLTwoRedMin,31,%,results/E5/summary/runs.csv,min over fleet x scenario of 100*(1 - L2 solves ET/RT) [part=a]
 \RLTwoRedMax,50,%,results/E5/summary/runs.csv,max ... L2 solves [part=a]
 \RTotRedMin,29,%,results/E5/summary/runs.csv,min ... total solves [part=a]
 \RTotRedMax,50,%,results/E5/summary/runs.csv,max ... total solves [part=a]
+\RETMaxDeltaNonPri,0.01,pp,results/E5/summary/runs.csv,max |RT-ET - RT| nonpriority_fulfil_pct [part=a]
+\RETMaxDeltaCostMWh,0.22,$/MWh,results/E5/summary/runs.csv,max |RT-ET - RT| unit cost x1000 [part=a]
+\RTmaxLTwoFirst,102,,results/E5/summary/runs.csv,l2_solves at smallest T_max [part=b]
+\RTmaxLTwoLast,60,,results/E5/summary/runs.csv,l2_solves at largest T_max [part=b]
 \RScalMeanMsMin,17,ms,results/E5/summary/runs.csv,"min l2_solve_ms_mean [part=c, 180 EVs, RT-ET]"
 \RScalMeanMsMax,30,ms,results/E5/summary/runs.csv,"max l2_solve_ms_mean [part=c, 180 EVs, RT-ET]"
 \RScalPNinetyFiveMax,59,ms,results/E5/summary/runs.csv,"max l2_solve_ms_p95 [part=c, 180 EVs, RT-ET]"
+\RScalNonPriRTETLowMin,82.1,%,results/E5/summary/runs.csv,"min nonpriority_fulfil_pct [part=c, ratio in {2,3}, AQPS-RT-ET]"
+\RScalNonPriRTETLowMax,84.7,%,results/E5/summary/runs.csv,"max nonpriority_fulfil_pct [part=c, ratio in {2,3}, AQPS-RT-ET]"
+\RScalSaveMin,3.3,%,results/E5/summary/runs.csv,min 100*(1 - $/kWh RT-ET / LLF) [part=c]
+\RScalSaveMax,4.9,%,results/E5/summary/runs.csv,max 100*(1 - $/kWh RT-ET / LLF) [part=c]
 \RScalNonPriLLFFortyFiveRatioFour,98.5,%,results/E5/summary/runs.csv,"nonpriority_fulfil_pct [part=c, fleet=45, ratio=4, method=LLF]"
 \RScalNonPriRTETFortyFiveRatioFour,65.1,%,results/E5/summary/runs.csv,"nonpriority_fulfil_pct [part=c, fleet=45, ratio=4, method=AQPS-RT-ET]"
 \RScalNonPriLLFNinetyRatioFour,100.0,%,results/E5/summary/runs.csv,"nonpriority_fulfil_pct [part=c, fleet=90, ratio=4, method=LLF]"
@@ -192,6 +259,7 @@ macro,value,unit,source,expression
 \RScalNonPriRTETOneEightyRatioFour,66.0,%,results/E5/summary/runs.csv,"nonpriority_fulfil_pct [part=c, fleet=180, ratio=4, method=AQPS-RT-ET]"
 \RDeltaEagerNonPri,49.4,%,results/E6/summary/runs.csv,"nonpriority_fulfil_pct [param=preempt_slack_h, value=null (eager)]"
 \RDeltaTwoNonPri,87.6,%,results/E6/summary/runs.csv,"nonpriority_fulfil_pct [param=preempt_slack_h, value=2]"
+\RDeltaThreeNonPri,83.0,%,results/E6/summary/runs.csv,"nonpriority_fulfil_pct [param=preempt_slack_h, value=3]"
 \RReserveTwentyMission,95.6,%,results/E6/summary/runs.csv,"mission_sufficiency_pct [param=reserve_frac, value=0.2]"
 \ROverloadMissionMinStatic,48.3,%,results/E7/summary/runs.csv,"min mission_sufficiency_pct [priority_share>=0.65, method=AQPS-static]"
 \ROverloadMissionMaxStatic,51.3,%,results/E7/summary/runs.csv,"max mission_sufficiency_pct [priority_share>=0.65, method=AQPS-static]"
@@ -203,8 +271,16 @@ macro,value,unit,source,expression
 \ROverloadMissionMaxEDF,64.1,%,results/E7/summary/runs.csv,"max mission_sufficiency_pct [priority_share>=0.65, method=EDF]"
 \ROverloadMissionMinMPC,55.2,%,results/E7/summary/runs.csv,"min mission_sufficiency_pct [priority_share>=0.65, method=MPC-only]"
 \ROverloadMissionMaxMPC,64.1,%,results/E7/summary/runs.csv,"max mission_sufficiency_pct [priority_share>=0.65, method=MPC-only]"
+\RLowShareMissionMinLLFEDF,21,%,results/E7/summary/runs.csv,"min mission_sufficiency_pct [priority_share<=0.5, method in ['LLF', 'EDF']]"
+\RLowShareMissionMaxLLFEDF,36,%,results/E7/summary/runs.csv,"max mission_sufficiency_pct [priority_share<=0.5, method in ['LLF', 'EDF']]"
+\RLowShareMissionMinMPC,43,%,results/E7/summary/runs.csv,"min mission_sufficiency_pct [priority_share<=0.5, method in ['MPC-only']]"
+\RLowShareMissionMaxMPC,45,%,results/E7/summary/runs.csv,"max mission_sufficiency_pct [priority_share<=0.5, method in ['MPC-only']]"
 \ROverloadSoftMinStatic,11,,results/E7/summary/runs.csv,"min soft_solves [share>=0.65, AQPS-static]"
 \ROverloadSoftMaxStatic,17,,results/E7/summary/runs.csv,"max soft_solves [share>=0.65, AQPS-static]"
 \RSimCommit,070d9e2,,results/E1/manifest.json,git_commit (first 7)
 \RMosekVersion,11.2.6,,results/E1/manifest.json,versions.mosek
 \RCvxpyVersion,1.8.1,,results/E1/manifest.json,versions.cvxpy
+\RCPUCores,8,,results/E1/manifest.json,machine.cpu_count
+\REOneMeanMsMinRTET,11,ms,results/E1/summary/runs.csv,min l2_solve_ms_mean [method=AQPS-RT-ET]
+\REOneMeanMsMaxRTET,22,ms,results/E1/summary/runs.csv,max l2_solve_ms_mean [method=AQPS-RT-ET]
+\REOnePNinetyFiveMaxRTET,34,ms,results/E1/summary/runs.csv,max l2_solve_ms_p95 [method=AQPS-RT-ET]

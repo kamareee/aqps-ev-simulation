@@ -42,6 +42,16 @@ def e1():
                 put("Mission" + key, r.mission_sufficiency_pct, 1, "%", src, f"mission_sufficiency_pct [{flt}]")
                 put("NonPri" + key, r.nonpriority_fulfil_pct, 1, "%", src, f"nonpriority_fulfil_pct [{flt}]")
                 put("UnitCost" + key, r.unit_cost_per_kwh, 3, "$/kWh", src, f"unit_cost_per_kwh [{flt}]")
+                put("NonPriTwoTwo" + key, r.nonpriority_fulfil_22h_pct, 1, "%", src,
+                    f"nonpriority_fulfil_22h_pct [{flt}]")
+    gaps = []
+    for n in (45, 90):
+        g = d[(d.fleet_size == n) & (d.scenario == "S3_PeakStress")].set_index("method")
+        gaps.append(g.loc["Offline-Optimal"].nonpriority_fulfil_pct - g.loc["AQPS-RT-ET"].nonpriority_fulfil_pct)
+    put("SThreeOfflineGapMin", min(gaps), 1, "pp", src,
+        "min over fleets of nonpriority_fulfil_pct Offline-Optimal - AQPS-RT-ET [S3_PeakStress]")
+    put("SThreeOfflineGapMax", max(gaps), 1, "pp", src,
+        "max over fleets of nonpriority_fulfil_pct Offline-Optimal - AQPS-RT-ET [S3_PeakStress]")
     o = d[d.method == "Offline-Optimal"]
     put("OfflineGapMax", 100 * o.offline_mip_gap_bound.max(), 4, "%", src,
         "100*max(offline_mip_gap_bound) [method=Offline-Optimal]")
@@ -55,6 +65,23 @@ def e1():
             sv.append(100 * (1 - a / b))
         put(f"UnitSaveMin{SCW[s]}", min(sv), 1, "%", src, f"min over fleets of 100*(1 - $/kWh RT-ET / LLF) [{s}]")
         put(f"UnitSaveMax{SCW[s]}", max(sv), 1, "%", src, f"max over fleets of 100*(1 - $/kWh RT-ET / LLF) [{s}]")
+
+
+def gantt():
+    from .make_figures import _gantt_selection
+    src = "results/E1/raw/{AQPS-RT-ET,LLF}_S3_PeakStress_90EV.json.gz"
+    aq = C.raw("E1", "AQPS-RT-ET_S3_PeakStress_90EV")
+    ll = C.raw("E1", "LLF_S3_PeakStress_90EV")
+    ids = _gantt_selection(aq, ll)
+    A = {e["id"]: e for e in aq["per_ev"]}
+    L = {e["id"]: e for e in ll["per_ev"]}
+    short = [L[i]["e_mission"] - L[i]["delivered"] for i in ids[:3]]
+    put("GanttShortMin", min(short), 1, "kWh", src, "min LLF mission shortfall of the Fig. 5 priority EVs")
+    put("GanttShortMax", max(short), 1, "kWh", src, "max LLF mission shortfall of the Fig. 5 priority EVs")
+    for nm, R in (("Aqps", A), ("LLF", L)):
+        pct = [100 * min(1.0, R[i]["delivered"] / R[i]["e_session"]) for i in ids[3:]]
+        put(f"GanttNP{nm}Min", min(pct), 0, "%", src, f"min session % of the Fig. 5 non-priority EVs ({nm})")
+        put(f"GanttNP{nm}Max", max(pct), 0, "%", src, f"max session % of the Fig. 5 non-priority EVs ({nm})")
 
 
 def e2():
@@ -74,6 +101,9 @@ def e3():
     d = C.runs("E3")
     src = "results/E3/summary/runs.csv"
     put("EThreeSeeds", d.seed.nunique(), 0, "", src, "number of seeds")
+    mu = d.groupby("method").unit_cost_per_kwh.mean()
+    put("EThreeUnitSpreadPct", 100 * (mu.max() / mu.min() - 1), 1, "%", src,
+        "100*(max/min - 1) of per-method mean unit_cost_per_kwh")
     for m in ("LLF", "EDF", "MPC-only", "AQPS-static", "AQPS-RT-ET"):
         x = d[d.method == m]
         for col, nm, dd in [("mission_sufficiency_pct", "Mission", 1), ("nonpriority_fulfil_pct", "NonPri", 1),
@@ -98,12 +128,33 @@ def e5():
     put("LTwoRedMax", max(l2), 0, "%", src, "max ... L2 solves [part=a]")
     put("TotRedMin", min(tot), 0, "%", src, "min ... total solves [part=a]")
     put("TotRedMax", max(tot), 0, "%", src, "max ... total solves [part=a]")
+    dn, dc = [], []
+    for (n, s), g in a.groupby(["fleet_size", "scenario"]):
+        rt, et = g[g.method == "AQPS-RT"].iloc[0], g[g.method == "AQPS-RT-ET"].iloc[0]
+        dn.append(abs(et.nonpriority_fulfil_pct - rt.nonpriority_fulfil_pct))
+        dc.append(abs(1000 * (et.unit_cost_per_kwh - rt.unit_cost_per_kwh)))
+    put("ETMaxDeltaNonPri", max(dn), 2, "pp", src, "max |RT-ET - RT| nonpriority_fulfil_pct [part=a]")
+    put("ETMaxDeltaCostMWh", max(dc), 2, "$/MWh", src, "max |RT-ET - RT| unit cost x1000 [part=a]")
+    b = d[d.part == "b_tmax_sweep"].sort_values("t_max_steps")
+    put("TmaxLTwoFirst", int(b.l2_solves.iloc[0]), 0, "", src, "l2_solves at smallest T_max [part=b]")
+    put("TmaxLTwoLast", int(b.l2_solves.iloc[-1]), 0, "", src, "l2_solves at largest T_max [part=b]")
     c = d[(d.part == "c_scalability") & (d.method == "AQPS-RT-ET")]
     big = c[c.fleet_size == 180]
     put("ScalMeanMsMin", big.l2_solve_ms_mean.min(), 0, "ms", src, "min l2_solve_ms_mean [part=c, 180 EVs, RT-ET]")
     put("ScalMeanMsMax", big.l2_solve_ms_mean.max(), 0, "ms", src, "max l2_solve_ms_mean [part=c, 180 EVs, RT-ET]")
     put("ScalPNinetyFiveMax", big.l2_solve_ms_p95.max(), 0, "ms", src, "max l2_solve_ms_p95 [part=c, 180 EVs, RT-ET]")
     g = d[(d.part == "c_scalability")]
+    low = g[(g.method == "AQPS-RT-ET") & (g.ratio < 4)]
+    put("ScalNonPriRTETLowMin", low.nonpriority_fulfil_pct.min(), 1, "%", src,
+        "min nonpriority_fulfil_pct [part=c, ratio in {2,3}, AQPS-RT-ET]")
+    put("ScalNonPriRTETLowMax", low.nonpriority_fulfil_pct.max(), 1, "%", src,
+        "max nonpriority_fulfil_pct [part=c, ratio in {2,3}, AQPS-RT-ET]")
+    sv = []
+    for (n, ratio), h in g.groupby(["fleet_size", "ratio"]):
+        h = h.set_index("method")
+        sv.append(100 * (1 - h.loc["AQPS-RT-ET"].unit_cost_per_kwh / h.loc["LLF"].unit_cost_per_kwh))
+    put("ScalSaveMin", min(sv), 1, "%", src, "min 100*(1 - $/kWh RT-ET / LLF) [part=c]")
+    put("ScalSaveMax", max(sv), 1, "%", src, "max 100*(1 - $/kWh RT-ET / LLF) [part=c]")
     for n in (45, 90, 180):
         for m in ("LLF", "AQPS-RT-ET"):
             r = g[(g.fleet_size == n) & (g.ratio == 4) & (g.method == m)].iloc[0]
@@ -119,6 +170,8 @@ def e6():
         "nonpriority_fulfil_pct [param=preempt_slack_h, value=null (eager)]")
     put("DeltaTwoNonPri", s[s.value == 2.0].nonpriority_fulfil_pct.iloc[0], 1, "%", src,
         "nonpriority_fulfil_pct [param=preempt_slack_h, value=2]")
+    put("DeltaThreeNonPri", s[s.value == 3.0].nonpriority_fulfil_pct.iloc[0], 1, "%", src,
+        "nonpriority_fulfil_pct [param=preempt_slack_h, value=3]")
     r = d[d.param == "reserve_frac"]
     put("ReserveTwentyMission", r[np.isclose(r.value, 0.2)].mission_sufficiency_pct.iloc[0], 1, "%", src,
         "mission_sufficiency_pct [param=reserve_frac, value=0.2]")
@@ -134,6 +187,13 @@ def e7():
             f"min mission_sufficiency_pct [priority_share>=0.65, method={m}]")
         put(f"OverloadMissionMax{MW[m]}", x.mission_sufficiency_pct.max(), 1, "%", src,
             f"max mission_sufficiency_pct [priority_share>=0.65, method={m}]")
+    lo = d[d.priority_share <= 0.5]
+    for nm, ms in (("LLFEDF", ["LLF", "EDF"]), ("MPC", ["MPC-only"])):
+        x = lo[lo.method.isin(ms)]
+        put(f"LowShareMissionMin{nm}", x.mission_sufficiency_pct.min(), 0, "%", src,
+            f"min mission_sufficiency_pct [priority_share<=0.5, method in {ms}]")
+        put(f"LowShareMissionMax{nm}", x.mission_sufficiency_pct.max(), 0, "%", src,
+            f"max mission_sufficiency_pct [priority_share<=0.5, method in {ms}]")
     x = hi[hi.method == "AQPS-static"]
     put("OverloadSoftMinStatic", x.soft_solves.min(), 0, "", src, "min soft_solves [share>=0.65, AQPS-static]")
     put("OverloadSoftMaxStatic", x.soft_solves.max(), 0, "", src, "max soft_solves [share>=0.65, AQPS-static]")
@@ -146,6 +206,22 @@ def e4():
     put("NmaeMin", min(nm), 1, "%", src, "min nmae_pct over the 6 selected days")
     put("NmaeMax", max(nm), 1, "%", src, "max nmae_pct over the 6 selected days")
     put("CandidateDays", days["metadata"]["n_candidate_weekdays"], 0, "", src, "metadata.n_candidate_weekdays")
+    put("PVNormMW", days["metadata"]["normalisation_max_mw"], 0, "MW", src, "metadata.normalisation_max_mw")
+    ref = next(dd for dd in days["days"] if dd["reference"])
+    put("PVRefDate", ref["date"], 0, "", src, "date of the reference (50th percentile) day")
+    put("PVRefNmae", ref["nmae_pct"], 1, "%", src, "nmae_pct of the reference day")
+    hi = max(days["days"], key=lambda dd: dd["percentile"])
+    put("PVOverForecastPct", 100 * (hi["energy_forecast_kwh_dayD"] / hi["energy_actual_kwh_dayD"] - 1), 0, "%", src,
+        "100*(forecast/actual - 1) of day-D energy on the highest-percentile day")
+    e4 = C.runs("E4")
+    for n in (45, 90):
+        a = e4[(e4.fleet_size == n) & (e4.method == "AQPS-RT-ET")].set_index("pv_date").unit_cost_per_kwh
+        l = e4[(e4.fleet_size == n) & (e4.method == "LLF")].set_index("pv_date").unit_cost_per_kwh
+        sv = 100 * (1 - a / l)
+        put(f"EFourSaveMin{WORD[n]}", sv.min(), 1, "%", "results/E4/summary/runs.csv",
+            f"min over days of 100*(1 - $/kWh RT-ET / LLF) [fleet={n}]")
+        put(f"EFourSaveMax{WORD[n]}", sv.max(), 1, "%", "results/E4/summary/runs.csv",
+            f"max over days of 100*(1 - $/kWh RT-ET / LLF) [fleet={n}]")
 
 
 def provenance():
@@ -153,10 +229,19 @@ def provenance():
     put("SimCommit", m["git_commit"][:7], 0, "", "results/E1/manifest.json", "git_commit (first 7)")
     put("MosekVersion", m["versions"]["mosek"], 0, "", "results/E1/manifest.json", "versions.mosek")
     put("CvxpyVersion", m["versions"]["cvxpy"], 0, "", "results/E1/manifest.json", "versions.cvxpy")
+    put("CPUCores", m["machine"]["cpu_count"], 0, "", "results/E1/manifest.json", "machine.cpu_count")
+    d = C.runs("E1")
+    r = d[d.method == "AQPS-RT-ET"]
+    put("EOneMeanMsMinRTET", r.l2_solve_ms_mean.min(), 0, "ms", "results/E1/summary/runs.csv",
+        "min l2_solve_ms_mean [method=AQPS-RT-ET]")
+    put("EOneMeanMsMaxRTET", r.l2_solve_ms_mean.max(), 0, "ms", "results/E1/summary/runs.csv",
+        "max l2_solve_ms_mean [method=AQPS-RT-ET]")
+    put("EOnePNinetyFiveMaxRTET", r.l2_solve_ms_p95.max(), 0, "ms", "results/E1/summary/runs.csv",
+        "max l2_solve_ms_p95 [method=AQPS-RT-ET]")
 
 
 def main():
-    for fn in (e1, e2, e3, e4, e5, e6, e7, provenance):
+    for fn in (e1, gantt, e2, e3, e4, e5, e6, e7, provenance):
         fn()
     os.makedirs(C.OUT, exist_ok=True)
     with open(os.path.join(C.OUT, "numbers.tex"), "w", encoding="utf-8", newline="\n") as fh:  # LF on every OS

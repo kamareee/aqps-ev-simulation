@@ -55,3 +55,4 @@ results/*/raw/
 # AEMO raw archives are large and re-downloadable; checksums.csv is tracked
 data/aemo_raw/*.zip
 data/aemo_raw/*.part
+manuscript/build/

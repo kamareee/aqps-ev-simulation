@@ -51,10 +51,11 @@ GRID = "#e3e3e3"
 SCEN = ["S1_Baseline", "S2_Contention", "S3_PeakStress"]
 SCEN_LABEL = {"S1_Baseline": "S1 Baseline", "S2_Contention": "S2 Contention", "S3_PeakStress": "S3 Peak stress"}
 
-# Elsevier artwork sizes: single column 90 mm, double column 190 mm
-MM = 1 / 25.4
-W1 = 90 * MM
-W2 = 190 * MM
+# Figure widths = column and text width of elsarticle [3p,twocolumn] (222 pt and 468 pt), so the
+# 7-8 pt figure fonts print at their nominal size in the manuscript
+PT = 1 / 72.27
+W1 = 222 * PT
+W2 = 468 * PT
 
 
 def style():
