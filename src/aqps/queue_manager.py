@@ -9,7 +9,7 @@ act only once its slack reaches delta (delta = null gives eager preemption, as i
 When a waiting priority EV needs an EVSE and all M are occupied:
   Tier 1  Non-priority preemption: disconnect the connected non-priority EV with the largest laxity.
   Tier 2  Safe release (automatic): disconnect the connected priority EV that satisfies all of
-          (a) E_curr >= E_trip + E_ret + r
+          (a) E_curr >= E_trip + E_ret + r   and   E_mission met (Eq. 10 quantity)
           (b) E_further_today <= E_curr - (E_trip + E_ret + r)
           (c) xbar * (d_next_day - a_return) * dt >= E_next_day - surplus   (skipped for overnight EVs)
           choosing the largest surplus, then the latest departure. It leaves with >= mission energy.
@@ -25,6 +25,8 @@ Rotations are counted separately; their effect appears in the mission-sufficienc
 from typing import Dict, List, Set, Tuple
 
 from .data_structures import Vehicle
+
+MISSION_TOL_KWH = 1e-3  # safe release requires E_mission met (same quantity as Eq. 10)
 
 
 class QueueManager:
@@ -49,7 +51,7 @@ class QueueManager:
 
     def safe_release_ok(self, v: Vehicle) -> Tuple[bool, float]:
         surplus = v.current_energy_kwh - v.mission_level_kwh
-        if surplus < -1e-6:                                    # (a)
+        if surplus < -1e-6 or v.mission_remaining > MISSION_TOL_KWH:   # (a), physical level and Eq. 10 target
             return False, surplus
         if v.further_trips_today_kwh > surplus + 1e-6:         # (b)
             return False, surplus
