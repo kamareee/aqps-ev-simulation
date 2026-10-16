@@ -86,22 +86,22 @@ def runs(exp: str) -> pd.DataFrame:
 
 
 def raw(exp: str, run_id: str) -> dict:
-    with gzip.open(os.path.join(RES, exp, "raw", run_id + ".json.gz"), "rt") as f:
+    with gzip.open(os.path.join(RES, exp, "raw", run_id + ".json.gz"), "rt", encoding="utf-8") as f:
         return json.load(f)
 
 
 def cfg() -> dict:
-    with open(os.path.join(ROOT, "config", "experiments.yaml")) as f:
+    with open(os.path.join(ROOT, "config", "experiments.yaml"), encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
 def fleet_data(n: int) -> dict:
-    with open(os.path.join(ROOT, f"simulation_data_{n}EVs.json")) as f:
+    with open(os.path.join(ROOT, f"simulation_data_{n}EVs.json"), encoding="utf-8") as f:
         return json.load(f)
 
 
 def pv_days() -> dict:
-    with open(os.path.join(ROOT, "data", "aemo_vic1_selected_days.json")) as f:
+    with open(os.path.join(ROOT, "data", "aemo_vic1_selected_days.json"), encoding="utf-8") as f:
         return json.load(f)
 
 

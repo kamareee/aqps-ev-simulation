@@ -229,7 +229,7 @@ STATE_LABEL = {"wait": "Waiting (no EVSE)", "np": "On EVSE, non-priority", "p": 
 def fig6_swimlane():
     case = "case_1_breakdown"
     r = C.raw("E2", f"AQPS-RT-ET_{case}")
-    inj = __import__("json").load(open(C.os.path.join(C.ROOT, "data", "operator_injections.json")))[case]
+    inj = __import__("json").load(open(C.os.path.join(C.ROOT, "data", "operator_injections.json"), encoding="utf-8"))[case]
     t_inj, promoted = inj["time_idx"], inj["promote_id"]
     tr, per = r["trace"], {e["id"]: e for e in r["per_ev"]}
     T = len(tr["gross"])
