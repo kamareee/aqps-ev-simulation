@@ -42,4 +42,6 @@ Read first: `docs/fix_plan_v3.md` (current plan and decisions), `docs/review_202
 - `src/aqps/`: `tou_optimization.py` (L2), `priority_selection.py` (L0), `queue_manager.py` (L1),
   `scheduler.py` (static / RT / RT-ET), `impact_preview.py`, `baselines.py`, `legacy_v1.py` (submitted method).
 - `run_all_experiments.py`: E1–E7.
+- `postprocess/`: figures, tables and `paper/numbers.tex` from committed results (`python -m postprocess.build`).
+- `paper/`: generated figures/tables/numbers (do not edit by hand).
 - `legacy/`: superseded code and documents (kept for traceability, not used).
