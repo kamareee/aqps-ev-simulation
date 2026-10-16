@@ -164,7 +164,7 @@ def main():
         for r in REG:
             fh.write(f"\\newcommand{{{r['macro']}}}{{{r['value']}}}\n")
     with open(os.path.join(C.OUT, "numbers_map.csv"), "w", newline="") as fh:
-        w = csv.DictWriter(fh, fieldnames=["macro", "value", "unit", "source", "expression"])
+        w = csv.DictWriter(fh, fieldnames=["macro", "value", "unit", "source", "expression"], lineterminator="\n")
         w.writeheader()
         w.writerows(REG)
     print(f"  numbers: {len(REG)} macros")
