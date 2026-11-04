@@ -67,21 +67,21 @@ def e1():
         put(f"UnitSaveMax{SCW[s]}", max(sv), 1, "%", src, f"max over fleets of 100*(1 - $/kWh RT-ET / LLF) [{s}]")
 
 
-def gantt():
-    from .make_figures import _gantt_selection
-    src = "results/E1/raw/{AQPS-RT-ET,LLF}_S3_PeakStress_90EV.json.gz"
-    aq = C.raw("E1", "AQPS-RT-ET_S3_PeakStress_90EV")
-    ll = C.raw("E1", "LLF_S3_PeakStress_90EV")
-    ids = _gantt_selection(aq, ll)
-    A = {e["id"]: e for e in aq["per_ev"]}
-    L = {e["id"]: e for e in ll["per_ev"]}
-    short = [L[i]["e_mission"] - L[i]["delivered"] for i in ids[:3]]
-    put("GanttShortMin", min(short), 1, "kWh", src, "min LLF mission shortfall of the Fig. 5 priority EVs")
-    put("GanttShortMax", max(short), 1, "kWh", src, "max LLF mission shortfall of the Fig. 5 priority EVs")
-    for nm, R in (("Aqps", A), ("LLF", L)):
-        pct = [100 * min(1.0, R[i]["delivered"] / R[i]["e_session"]) for i in ids[3:]]
-        put(f"GanttNP{nm}Min", min(pct), 0, "%", src, f"min session % of the Fig. 5 non-priority EVs ({nm})")
-        put(f"GanttNP{nm}Max", max(pct), 0, "%", src, f"max session % of the Fig. 5 non-priority EVs ({nm})")
+def swim():
+    from .make_figures import SWIM_RUN, swim_runs
+    src = "results/E1/raw/{AQPS-RT-ET,LLF,EDF}_" + SWIM_RUN + ".json.gz"
+    _, P, ids = swim_runs()
+    pri, npr = ids[:2], ids[2]
+    for nm, m in (("LLF", "LLF"), ("EDF", "EDF")):
+        short = [P[m][i]["e_mission"] - P[m][i]["delivered"] for i in pri]
+        put(f"SwimShort{nm}Min", min(short), 1, "kWh", src, f"min {m} mission shortfall of the Fig. 5 priority EVs")
+        put(f"SwimShort{nm}Max", max(short), 1, "kWh", src, f"max {m} mission shortfall of the Fig. 5 priority EVs")
+    for nm, m in (("Aqps", "AQPS-RT-ET"), ("LLF", "LLF"), ("EDF", "EDF")):
+        e = P[m][npr]
+        put(f"SwimNP{nm}", 100 * min(1.0, e["delivered"] / e["e_session"]), 0, "%", src,
+            f"session % of the Fig. 5 non-priority EV ({m})")
+    put("SwimNPPreempt", P["AQPS-RT-ET"][npr]["preempted"], 0, "", src,
+        "preemptions of the Fig. 5 non-priority EV under AQPS-RT-ET")
 
 
 def e2():
@@ -241,7 +241,7 @@ def provenance():
 
 
 def main():
-    for fn in (e1, gantt, e2, e3, e4, e5, e6, e7, provenance):
+    for fn in (e1, swim, e2, e3, e4, e5, e6, e7, provenance):
         fn()
     os.makedirs(C.OUT, exist_ok=True)
     with open(os.path.join(C.OUT, "numbers.tex"), "w", encoding="utf-8", newline="\n") as fh:  # LF on every OS
