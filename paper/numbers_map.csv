@@ -177,12 +177,14 @@ macro,value,unit,source,expression
 \RUnitSaveMaxSTwo,3.8,%,results/E1/summary/runs.csv,max over fleets of 100*(1 - $/kWh RT-ET / LLF) [S2_Contention]
 \RUnitSaveMinSThree,0.2,%,results/E1/summary/runs.csv,min over fleets of 100*(1 - $/kWh RT-ET / LLF) [S3_PeakStress]
 \RUnitSaveMaxSThree,1.1,%,results/E1/summary/runs.csv,max over fleets of 100*(1 - $/kWh RT-ET / LLF) [S3_PeakStress]
-\RGanttShortMin,7.7,kWh,"results/E1/raw/{AQPS-RT-ET,LLF}_S3_PeakStress_90EV.json.gz",min LLF mission shortfall of the Fig. 5 priority EVs
-\RGanttShortMax,9.3,kWh,"results/E1/raw/{AQPS-RT-ET,LLF}_S3_PeakStress_90EV.json.gz",max LLF mission shortfall of the Fig. 5 priority EVs
-\RGanttNPAqpsMin,56,%,"results/E1/raw/{AQPS-RT-ET,LLF}_S3_PeakStress_90EV.json.gz",min session % of the Fig. 5 non-priority EVs (Aqps)
-\RGanttNPAqpsMax,90,%,"results/E1/raw/{AQPS-RT-ET,LLF}_S3_PeakStress_90EV.json.gz",max session % of the Fig. 5 non-priority EVs (Aqps)
-\RGanttNPLLFMin,86,%,"results/E1/raw/{AQPS-RT-ET,LLF}_S3_PeakStress_90EV.json.gz",min session % of the Fig. 5 non-priority EVs (LLF)
-\RGanttNPLLFMax,100,%,"results/E1/raw/{AQPS-RT-ET,LLF}_S3_PeakStress_90EV.json.gz",max session % of the Fig. 5 non-priority EVs (LLF)
+\RSwimShortLLFMin,7.7,kWh,"results/E1/raw/{AQPS-RT-ET,LLF,EDF}_S3_PeakStress_90EV.json.gz",min LLF mission shortfall of the Fig. 5 priority EVs
+\RSwimShortLLFMax,9.3,kWh,"results/E1/raw/{AQPS-RT-ET,LLF,EDF}_S3_PeakStress_90EV.json.gz",max LLF mission shortfall of the Fig. 5 priority EVs
+\RSwimShortEDFMin,9.3,kWh,"results/E1/raw/{AQPS-RT-ET,LLF,EDF}_S3_PeakStress_90EV.json.gz",min EDF mission shortfall of the Fig. 5 priority EVs
+\RSwimShortEDFMax,11.2,kWh,"results/E1/raw/{AQPS-RT-ET,LLF,EDF}_S3_PeakStress_90EV.json.gz",max EDF mission shortfall of the Fig. 5 priority EVs
+\RSwimNPAqps,90,%,"results/E1/raw/{AQPS-RT-ET,LLF,EDF}_S3_PeakStress_90EV.json.gz",session % of the Fig. 5 non-priority EV (AQPS-RT-ET)
+\RSwimNPLLF,100,%,"results/E1/raw/{AQPS-RT-ET,LLF,EDF}_S3_PeakStress_90EV.json.gz",session % of the Fig. 5 non-priority EV (LLF)
+\RSwimNPEDF,100,%,"results/E1/raw/{AQPS-RT-ET,LLF,EDF}_S3_PeakStress_90EV.json.gz",session % of the Fig. 5 non-priority EV (EDF)
+\RSwimNPPreempt,1,,"results/E1/raw/{AQPS-RT-ET,LLF,EDF}_S3_PeakStress_90EV.json.gz",preemptions of the Fig. 5 non-priority EV under AQPS-RT-ET
 \RCaseOneMissionLLF,100.0,%,results/E2/summary/runs.csv,"mission_sufficiency_pct [case=case_1_breakdown, method=LLF]"
 \RCaseOneMissionEDF,97.8,%,results/E2/summary/runs.csv,"mission_sufficiency_pct [case=case_1_breakdown, method=EDF]"
 \RCaseOneMissionStatic,97.8,%,results/E2/summary/runs.csv,"mission_sufficiency_pct [case=case_1_breakdown, method=AQPS-static]"

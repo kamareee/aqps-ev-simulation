@@ -4,8 +4,7 @@ Paper figures 3-8 (Figs 1-2 are diagrams drawn in the manuscript).
   fig3_service       E1: mission sufficiency and non-priority fulfilment, S1-S3 x {45, 90} EVs
   fig4a_cumulative_cost  E1 raw traces: cumulative grid energy cost, S2 and S3 x {45, 90} EVs
   fig4_cost_tiers    E1: grid energy cost by tariff tier (stacked)
-  fig5_gantt         E1 raw traces: 90-EV S3, AQPS-RT-ET vs LLF, 6 vehicles (selection rule below)
-  fig6_swimlane      E2 raw traces: case 1 (vehicle breakdown), EVSE state of 2 vehicles, 4 methods
+  fig5_swimlane_s3   E1 raw traces: 90-EV S3, EVSE state of 3 vehicles, AQPS-RT-ET / LLF / EDF
   fig7_aemo          AEMO PV forecast vs actual (3 of 6 days) and E4 $/kWh vs daily nMAE
   fig8_sensitivity   E6: all six one-at-a-time sweeps (AQPS-RT-ET), 3 metrics x 6 parameters
 
@@ -14,15 +13,10 @@ Run from the repo root:  python -m postprocess.make_figures
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
 from . import common as C
-
-KW_CMAP = LinearSegmentedColormap.from_list(
-    "kw", ["#cde2fb", "#86b6ef", "#3987e5", "#1c5cab", "#0d366b"])
-
 
 def bar(ax, x, h, m, w, bottom=None, **kw):
     return ax.bar(x, h, w, bottom=bottom, color=C.COLOR[m], hatch=C.HATCH.get(m),
@@ -190,171 +184,98 @@ def plot_events(ax, hrs, y, evs):
 
 
 # ----------------------------------------------------------------------------- Fig 5
-def _gantt_selection(aq, ll):
-    """3 priority EVs with the largest LLF mission shortfall that AQPS-RT-ET met, then
-    3 non-priority EVs most often preempted by AQPS-RT-ET (ties: earliest arrival)."""
-    A = {e["id"]: e for e in aq["per_ev"]}
-    L = {e["id"]: e for e in ll["per_ev"]}
+STATE_COLOR = {"wait": "#e6e6e6", "np": "#86b6ef", "p": "#1c5cab", "done": "#ffffff"}
+STATE_EDGE = {"done": "#9a9a9a"}
+STATE_LABEL = {"wait": "Waiting (no EVSE)", "np": "On EVSE, non-priority", "p": "On EVSE, priority",
+               "done": "Unplugged, charging complete"}
+SWIM_RUN = "S3_PeakStress_90EV"
+SWIM_METHODS = ["AQPS-RT-ET", "LLF", "EDF"]
+
+
+def _swim_selection(P):
+    """E1 S3 90 EVs. 2 priority EVs that AQPS-RT-ET serves to their mission, with the largest shortfall
+    under both LLF and EDF (rank by min of the two shortfalls; ties: id), then 1 non-priority EV most
+    often preempted by AQPS-RT-ET (ties: earliest arrival, id)."""
+    A, L, D = P["AQPS-RT-ET"], P["LLF"], P["EDF"]
+    short = lambda R, i: max(0.0, R[i]["e_mission"] - R[i]["delivered"])
     pri = [i for i, e in A.items() if e["roster_priority"] and e["delivered"] >= e["e_mission"] - 0.1]
-    pri.sort(key=lambda i: (-(L[i]["e_mission"] - L[i]["delivered"]), i))
+    pri.sort(key=lambda i: (-min(short(L, i), short(D, i)), i))
     npr = [i for i, e in A.items() if not e["roster_priority"] and e["preempted"] > 0]
     npr.sort(key=lambda i: (-A[i]["preempted"], A[i]["arrival_idx"], i))
-    return pri[:3] + npr[:3]
+    return pri[:2] + npr[:1]
 
 
-def _lanes(ax, res, ids, T, norm, title):
-    per = {e["id"]: e for e in res["per_ev"]}
-    hrs = C.step_to_hour(np.arange(T + 1))
-    evs = disconnect_events(res)
-    used = set()
-    for y, vid in enumerate(ids):
-        e = per[vid]
-        a, dep = e["arrival_idx"], e["departure_idx"]
-        ax.broken_barh([(hrs[a], hrs[dep] - hrs[a])], (y - 0.34, 0.68), facecolor="#f0f0f0", edgecolor="#bdbdbd",
-                       linewidth=0.5)
-        p = res["trace"]["power"].get(vid, [0.0] * T)
-        for t in range(a, dep):
-            if p[t] > 1e-3:
-                ax.broken_barh([(hrs[t], hrs[t + 1] - hrs[t])], (y - 0.34, 0.68), facecolor=KW_CMAP(norm(p[t])),
-                               edgecolor="none")
-        plot_events(ax, hrs, y, evs.get(vid, []))
-        used |= {k for _, k in evs.get(vid, [])}
-        miss = e["e_mission"] - e["delivered"]
-        if e["roster_priority"]:
-            txt = "demand met" if miss <= 0.1 else f"short {miss:.1f} kWh"
-            col = C.INK if miss <= 0.1 else C.COLOR["LLF"]
-        else:
-            txt = f"{100 * min(1, e['delivered'] / e['e_session']):.0f} % of demand"
-            col = C.INK2
-        ax.text(hrs[dep] + 0.25, y, txt, va="center", ha="left", fontsize=6.5, color=col)
-    ax.set_yticks(range(len(ids)))
-    ax.set_yticklabels([f"{v.replace('_', ' ')} ({'P' if per[v]['roster_priority'] else 'NP'})" for v in ids])
-    ax.invert_yaxis()
-    ax.grid(False)
-    ax.set_title(title, loc="left", pad=3)
-    return used
+def swim_runs():
+    R = {m: C.raw("E1", f"{m}_{SWIM_RUN}") for m in SWIM_METHODS}
+    P = {m: {e["id"]: e for e in R[m]["per_ev"]} for m in SWIM_METHODS}
+    return R, P, _swim_selection(P)
 
 
-def fig5_gantt():
-    aq = C.raw("E1", "AQPS-RT-ET_S3_PeakStress_90EV")
-    ll = C.raw("E1", "LLF_S3_PeakStress_90EV")
-    ids = _gantt_selection(aq, ll)
-    T = len(aq["trace"]["gross"])
-    pmax = max(max(r["trace"]["power"].get(v, [0])) for r in (aq, ll) for v in ids)
-    norm = plt.Normalize(0, pmax)
-    per = {e["id"]: e for e in aq["per_ev"]}
-    h0 = np.floor(C.step_to_hour(min(per[v]["arrival_idx"] for v in ids)))
-    h1 = np.ceil(C.step_to_hour(max(per[v]["departure_idx"] for v in ids))) + 1.6
-    fig, axes = plt.subplots(2, 1, figsize=(C.W2, 3.6), sharex=True)
-    used = set()
-    for ax, res, ttl in [(axes[0], aq, "(a) AQPS-RT-ET"), (axes[1], ll, "(b) LLF")]:
-        ax.axvspan(15, 21, color="#f4f4f4", zorder=0, linewidth=0)
-        used |= _lanes(ax, res, ids, T, norm, ttl)
-        ax.set_xlim(h0, h1)
-    axes[0].text(18, -0.62, "peak tariff 15:00\u201321:00", ha="center", va="bottom", fontsize=6.5, color=C.INK2)
-    C.hour_ticks(axes[1], h0=h0, h1=np.floor(h1), every=2)
-    axes[1].set_xlim(h0, h1)
-    axes[1].set_xlabel("Time (AEST)")
-    handles = [Patch(facecolor="#f0f0f0", edgecolor="#bdbdbd", linewidth=0.5, label="At depot, not charging")]
-    handles += event_handles(used)
-    fig.legend(handles=handles, loc="upper left", ncol=len(handles), bbox_to_anchor=(0.11, 1.0),
-               columnspacing=1.2, handletextpad=0.4, fontsize=6.5)
-    sm = plt.cm.ScalarMappable(norm=norm, cmap=KW_CMAP)
-    cax = fig.add_axes([0.83, 0.957, 0.14, 0.02])
-    cb = fig.colorbar(sm, cax=cax, orientation="horizontal")
-    cb.outline.set_linewidth(0.4)
-    cb.ax.tick_params(labelsize=6.5, length=2, pad=1)
-    fig.text(0.825, 0.967, "Power (kW)", ha="right", va="center", fontsize=6.5, color=C.INK)
-    fig.subplots_adjust(left=0.11, right=0.995, top=0.875, bottom=0.11, hspace=0.3)
-    C.save(fig, "fig5_gantt")
-    return ids
-
-
-# ----------------------------------------------------------------------------- Fig 6
-STATE_COLOR = {"wait": "#e6e6e6", "np": "#86b6ef", "p": "#1c5cab"}
-STATE_LABEL = {"wait": "Waiting (no EVSE)", "np": "On EVSE, non-priority", "p": "On EVSE, priority"}
-
-
-FIG6_METHODS = ["AQPS-RT-ET", "AQPS-static", "LLF", "EDF"]
-
-
-def fig6_swimlane():
-    """E2 case 1, EVSE state of 2 vehicles under 4 methods. Selection: the promoted van, then the priority
-    vans that miss their mission under any method (earliest arrival first), filled up to 2 with priority
-    vans connected at the injection (earliest departure first). Colour: on-EVSE state as priority uses the
-    method's priority set for AQPS and the roster flag for LLF/EDF (no priority set)."""
-    case = "case_1_breakdown"
-    inj = __import__("json").load(open(C.os.path.join(C.ROOT, "data", "operator_injections.json"), encoding="utf-8"))[case]
-    t_inj, promoted = inj["time_idx"], inj["promote_id"]
-    R = {m: C.raw("E2", f"{m}_{case}") for m in FIG6_METHODS}
-    P = {m: {e["id"]: e for e in R[m]["per_ev"]} for m in FIG6_METHODS}
-    sel = [promoted]
-    missed = sorted({v for m in FIG6_METHODS for v, e in P[m].items()
-                     if e["roster_priority"] and e["delivered"] < e["e_mission"] - 0.1 and v not in sel},
-                    key=lambda v: (P["AQPS-RT-ET"][v]["arrival_idx"], v))
-    sel += missed[:2 - len(sel)]
-    if len(sel) < 2:
-        r0 = R["AQPS-RT-ET"]
-        extra = sorted((v for v in P["AQPS-RT-ET"] if v not in sel and v in r0["trace"]["connected"][t_inj]
-                        and v in r0["trace"]["priority"][t_inj]),
-                       key=lambda v: (P["AQPS-RT-ET"][v]["departure_idx"], v))
-        sel += extra[:2 - len(sel)]
+def fig5_swimlane_s3():
+    """EVSE state of 3 EVs under AQPS-RT-ET, LLF and EDF, E1 S3 90 EVs (no operator injection). On-EVSE
+    state as priority uses the method's priority set for AQPS and the roster flag for LLF/EDF (no
+    priority set). End label: mission outcome (P) or delivered share of the session energy (NP)."""
+    R, P, sel = swim_runs()
     T = len(R["AQPS-RT-ET"]["trace"]["gross"])
     hrs = C.step_to_hour(np.arange(T + 1))
-    h0 = float(np.floor(min(C.step_to_hour(P[m][v]["arrival_idx"]) for m in FIG6_METHODS for v in sel)))
-    h1 = float(np.ceil(max(C.step_to_hour(P[m][v]["departure_idx"]) for m in FIG6_METHODS for v in sel))) + 2.0
-    fig, axes = plt.subplots(len(FIG6_METHODS), 1, figsize=(C.W2, 3.85), sharex=True)
-    used = set()
-    for k, (ax, m) in enumerate(zip(axes, FIG6_METHODS)):
+    h0 = float(np.floor(min(C.step_to_hour(P[m][v]["arrival_idx"]) for m in SWIM_METHODS for v in sel)))
+    h1 = float(np.ceil(max(C.step_to_hour(P[m][v]["departure_idx"]) for m in SWIM_METHODS for v in sel))) + 2.0
+    fig, axes = plt.subplots(len(SWIM_METHODS), 1, figsize=(C.W2, 3.6), sharex=True)
+    used, used_st = set(), set()
+    for k, (ax, m) in enumerate(zip(axes, SWIM_METHODS)):
         r, per = R[m], P[m]
         tr = r["trace"]
         conn = [set(c) for c in tr["connected"]]
         pri = [set(p) for p in tr["priority"]]
         aqps = m.startswith("AQPS")
         events = disconnect_events(r)
+        ax.axvspan(15, 21, color="#f4f4f4", zorder=0, linewidth=0)
         for y, v in enumerate(sel):
             e = per[v]
             cum = np.cumsum(np.asarray(tr["power"].get(v, [0.0] * T)) * 0.25)
             for t in range(e["arrival_idx"], e["departure_idx"]):
                 if v not in conn[t]:
-                    st = "wait"
+                    st = "done" if t > 0 and cum[t - 1] >= e["e_session"] - 0.01 else "wait"
                 elif aqps:
                     st = "p" if v in pri[t] else "np"
                 else:
-                    st = "p" if e["roster_priority"] and (v != promoted or t >= t_inj) else "np"
+                    st = "p" if e["roster_priority"] else "np"
                 ax.broken_barh([(hrs[t], hrs[t + 1] - hrs[t])], (y - 0.32, 0.64), facecolor=STATE_COLOR[st],
-                               edgecolor="white", linewidth=0.3)
+                               edgecolor=STATE_EDGE.get(st, "white"), linewidth=0.3, zorder=2)
+                used_st.add(st)
             plot_events(ax, hrs, y, events.get(v, []))
             used |= {kk for _, kk in events.get(v, [])}
-            hit = np.nonzero(cum >= e["e_mission"] - 0.1)[0]
-            if hit.size:
-                ax.plot(hrs[hit[0] + 1], y - 0.42, marker="v", markersize=5, color="#eda100",
-                        markeredgecolor=C.INK, markeredgewidth=0.5, zorder=6)
-            ax.plot([hrs[e["departure_idx"]]] * 2, [y - 0.38, y + 0.38], color=C.INK, linewidth=0.9)
-            miss = e["e_mission"] - e["delivered"]
-            txt, col = ("demand met", C.INK) if miss <= 0.1 else (f"short {miss:.1f} kWh", C.COLOR["LLF"])
+            ax.plot([hrs[e["departure_idx"]]] * 2, [y - 0.38, y + 0.38], color=C.INK, linewidth=0.9, zorder=3)
+            if e["roster_priority"]:
+                hit = np.nonzero(cum >= e["e_mission"] - 0.1)[0]
+                if hit.size:
+                    ax.plot(hrs[hit[0] + 1], y - 0.42, marker="v", markersize=5, color="#eda100",
+                            markeredgecolor=C.INK, markeredgewidth=0.5, zorder=6)
+                miss = e["e_mission"] - e["delivered"]
+                txt, col = ("demand met", C.INK) if miss <= 0.1 else (f"short {miss:.1f} kWh", C.COLOR["LLF"])
+            else:
+                txt, col = f"{100 * min(1, e['delivered'] / e['e_session']):.0f} % of demand", C.INK2
             ax.text(hrs[e["departure_idx"]] + 0.12, y, txt, va="center", ha="left", fontsize=6.5, color=col)
-        ax.axvline(hrs[t_inj], color=C.COLOR["LLF"], linewidth=1.0, linestyle=(0, (3, 2)))
         ax.set_yticks(range(len(sel)))
-        ax.set_yticklabels([f"{v.replace('_', ' ')}{'*' if v == promoted else ''}" for v in sel])
+        ax.set_yticklabels([f"{v.replace('_', ' ')} ({'P' if per[v]['roster_priority'] else 'NP'})" for v in sel])
         ax.set_ylim(len(sel) - 0.5, -0.62)
         ax.grid(False)
-        ax.set_title(f"({'abcd'[k]}) {C.LABEL[m]}", loc="left", pad=2)
+        ax.set_title(f"({'abc'[k]}) {C.LABEL[m]}", loc="left", pad=2)
         ax.tick_params(axis="y", length=0)
-    axes[0].text(hrs[t_inj] + 0.08, -0.62, f"breakdown: {promoted.replace('_', ' ')} promoted", fontsize=6.5,
-                 color=C.COLOR["LLF"], va="bottom")
+    axes[0].text(18, -0.62, "peak tariff 15:00\u201321:00", ha="center", va="bottom", fontsize=6.5, color=C.INK2)
     C.hour_ticks(axes[-1], h0=h0, h1=h1 - 1, every=1)
     axes[-1].set_xlim(h0, h1 - 0.5)
     axes[-1].set_xlabel("Time (AEST)")
-    handles = [Patch(facecolor=STATE_COLOR[k], edgecolor="none", label=STATE_LABEL[k]) for k in ("wait", "np", "p")]
+    handles = [Patch(facecolor=STATE_COLOR[k], edgecolor=STATE_EDGE.get(k, "none"), linewidth=0.5,
+                     label=STATE_LABEL[k]) for k in ("wait", "np", "p", "done") if k in used_st]
     handles += event_handles(used)
     handles += [Line2D([], [], marker="v", linestyle="none", color="#eda100", markeredgecolor=C.INK,
                        markeredgewidth=0.5, markersize=5, label="Mission energy reached"),
                 Line2D([], [], marker="|", linestyle="none", color=C.INK, markersize=7, label="Departure")]
     fig.legend(handles=handles, loc="upper center", ncol=4, bbox_to_anchor=(0.5, 1.0),
                columnspacing=1.2, handletextpad=0.4, fontsize=6.5)
-    fig.subplots_adjust(left=0.085, right=0.995, top=0.875, bottom=0.10, hspace=0.55)
-    C.save(fig, "fig6_swimlane")
+    fig.subplots_adjust(left=0.11, right=0.995, top=0.87, bottom=0.11, hspace=0.5)
+    C.save(fig, "fig5_swimlane_s3")
     return sel
 
 
@@ -482,12 +403,10 @@ def main():
     fig3_service()
     fig4a_cumulative_cost()
     fig4_cost_tiers()
-    g = fig5_gantt()
-    s = fig6_swimlane()
+    s = fig5_swimlane_s3()
     fig7_aemo()
     fig8_sensitivity()
-    print("  fig5 vehicles:", g)
-    print("  fig6 vehicles:", s)
+    print("  fig5 vehicles:", s)
 
 
 if __name__ == "__main__":
