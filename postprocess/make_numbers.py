@@ -163,8 +163,8 @@ def e5():
 
 
 def e6():
-    d = C.runs("E6")
-    src = "results/E6/summary/runs.csv"
+    d = C.runs("E6_S2")
+    src = "results/E6_S2/summary/runs.csv"
     s = d[d.param == "preempt_slack_h"]
     put("DeltaEagerNonPri", s[s.value.isna()].nonpriority_fulfil_pct.iloc[0], 1, "%", src,
         "nonpriority_fulfil_pct [param=preempt_slack_h, value=null (eager)]")

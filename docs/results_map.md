@@ -10,7 +10,7 @@ Each run writes `results/<EXP>/raw/<run_id>.json.gz` (not committed) and `result
 | E3 | 30 random-disruption seeds, 90-EV **S3** (S2 version in `results/E3_S2`) | `E3/summary/runs.csv` | §4.5 | Table: mean ± 95 % CI |
 | E4 | 6 real AEMO days (nMAE percentiles) × {45, 90} EVs | `E4/summary/runs.csv` | §4.6 | Fig: (a) forecast vs actual (3 days), (b) $/kWh vs nMAE |
 | E5 | (a) RT vs RT-ET, (b) T_max sweep, (c) fleet / EV:EVSE ratio | `E5/summary/runs.csv` | §4.7 | Table: L2 solves, total solves, solve ms, outcome difference; scalability rows |
-| E6 | α3, α2, k_atc (congested), reserve, τ_pv, preemption slack δ | `E6/summary/runs.csv` | §4.8 | Fig: (a) α3, (b) reserve; others in a table |
+| E6 | α3, α2, k_atc (congested, 4:1), reserve, τ_pv, preemption slack δ; S3 | `E6/summary/runs.csv` (S3), `E6_S2/summary/runs.csv` (S2) | §5.6 | Table (S2 | S3) |
 | E7 | Priority share 30–90 % on 45-EV **S3** (cohort centred on the scenario's priority arrivals); S2 version in `results/E7_S2` | `E7/summary/runs.csv` | §4.8 / §3.5 | Table: overload behaviour |
 
 Inputs recorded in each `manifest.json`: git commit, config hash and snapshot, solver and versions,

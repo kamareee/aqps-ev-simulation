@@ -334,7 +334,7 @@ def fig8_sensitivity():
     """E6, AQPS-RT-ET, 90 EVs, S2: one-at-a-time sweeps of all six parameters (columns) and three outcome
     metrics (rows, shared y per row). The k_ATC sweep runs at 4 vehicles per charger (n_evse_override), so
     its level differs from the other columns. Dashed line = default (config)."""
-    e6 = C.runs("E6")
+    e6 = C.runs("E6_S2")
     c = C.cfg()
     reserve_default = 10  # % of C_i, data_generator.py (reserve = 0.10 x battery capacity)
     cols = [

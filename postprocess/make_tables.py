@@ -217,7 +217,7 @@ def tab_e5():
 
 # ----------------------------------------------------------------------------- E6
 def tab_e6():
-    d = C.runs("E6")
+    d = C.runs("E6_S2")
     lab = {"alpha2": "$\\alpha_2$", "k_atc": "$k_\\mathrm{ATC}$ (EV:EVSE 4:1)", "pv_dev_threshold_kw": "$\\tau_\\mathrm{pv}$ (kW)",
            "preempt_slack_h": "$\\delta$ (h)", "alpha3": "$\\alpha_3$", "reserve_frac": "$r$ (\\% of capacity)"}
     rows = []

@@ -64,7 +64,7 @@ experiments:
   E5: {fleets: [45, 90], scenarios: [S1_Baseline, S2_Contention, S3_PeakStress],
        methods: [AQPS-RT, AQPS-RT-ET], t_max_sweep: [1, 2, 4, 8],
        scalability: {fleets: [45, 90, 180], ratios: [2, 3, 4], methods: [LLF, EDF, AQPS-RT-ET]}}
-  E6: {fleet: 90, scenario: S2_Contention, method: AQPS-RT-ET,
+  E6: {fleet: 90, scenario: S3_PeakStress, method: AQPS-RT-ET,   # S2 version kept in results/E6_S2
        alpha3: [1.0e-6, 1.0e-5, 1.0e-4, 1.0e-3, 1.0e-2],
        alpha2: [10, 30, 100, 300, 1000],
        k_atc: [0.5, 1.0, 1.5, 2.0, 3.0], k_atc_ratio: 4,
