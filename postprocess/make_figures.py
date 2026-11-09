@@ -6,7 +6,7 @@ Paper figures 3-8 (Figs 1-2 are diagrams drawn in the manuscript).
   fig4_cost_tiers    E1: grid energy cost by tariff tier (stacked)
   fig5_swimlane_s3   E1 raw traces: 90-EV S3, EVSE state of 3 vehicles, AQPS-RT-ET / LLF / EDF
   fig7_aemo          AEMO PV forecast vs actual (3 of 6 days) and E4 $/kWh vs daily nMAE
-  fig8_sensitivity   E6: all six one-at-a-time sweeps (AQPS-RT-ET), 3 metrics x 6 parameters
+  (E6 sensitivity is a table: make_tables.tab_e6)
 
 Run from the repo root:  python -m postprocess.make_figures
 """
@@ -329,75 +329,6 @@ def fig7_aemo():
     C.save(fig, "fig7_aemo")
 
 
-# ----------------------------------------------------------------------------- Fig 8
-def fig8_sensitivity():
-    """E6, AQPS-RT-ET, 90 EVs, S2: one-at-a-time sweeps of all six parameters (columns) and three outcome
-    metrics (rows, shared y per row). The k_ATC sweep runs at 4 vehicles per charger (n_evse_override), so
-    its level differs from the other columns. Dashed line = default (config)."""
-    e6 = C.runs("E6_S2")
-    c = C.cfg()
-    reserve_default = 10  # % of C_i, data_generator.py (reserve = 0.10 x battery capacity)
-    cols = [
-        ("alpha2", r"$\alpha_2$", "log", c["optimizer"]["alpha2"]),
-        ("alpha3", r"$\alpha_3$", "log", c["optimizer"]["alpha3"]),
-        ("pv_dev_threshold_kw", r"$\tau_{\mathrm{pv}}$ (kW)", "lin", c["event_trigger"]["pv_dev_threshold_kw"]),
-        ("preempt_slack_h", r"$\delta$ (h)", "cat", c["layer1"]["preempt_slack_h"]),
-        ("k_atc", r"$k_{\mathrm{ATC}}$ (4:1)", "lin", c["layer0"]["k_atc"]),
-        ("reserve_frac", r"$r$ (% of $C_i$)", "lin", reserve_default),
-    ]
-    rows = [("mission_sufficiency_pct", "Priority vehicle\ndemand met (%)"),
-            ("nonpriority_fulfil_pct", "Non-priority\nfulfilment (%)"),
-            ("unit_cost_per_kwh", "Unit cost\n($/kWh)")]
-    col = C.COLOR["AQPS-RT-ET"]
-    fig, axes = plt.subplots(3, 6, figsize=(C.W2, 3.7), sharey="row")
-    for j, (par, xl, kind, dflt) in enumerate(cols):
-        sub = e6[e6.param == par].copy()
-        if kind == "cat":
-            sub["k"] = sub.value.fillna(np.inf)
-            sub = sub.sort_values("k")
-            x = np.arange(len(sub))
-            labels = ["eager" if not np.isfinite(v) else f"{v:g}" for v in sub.k]
-            xd = labels.index(f"{dflt:g}")
-        else:
-            sub = sub.sort_values("value")
-            x = sub.value.to_numpy() * (100 if par == "reserve_frac" else 1)
-            xd = dflt
-        for i, (met, yl) in enumerate(rows):
-            ax = axes[i, j]
-            ax.plot(x, sub[met].to_numpy(), color=col, marker="o", markersize=3.2, markeredgecolor="white",
-                    markeredgewidth=0.4, linewidth=1.0)
-            ax.axvline(xd, color=C.INK2, linewidth=0.6, linestyle=(0, (2, 2)), zorder=0)
-            if kind == "log":
-                ax.set_xscale("log")
-                ax.minorticks_off()
-                xt = list(x)[::2] if len(x) > 3 else list(x)
-                ax.set_xticks(xt)
-                ax.set_xticklabels([f"$10^{{{int(round(np.log10(v)))}}}$" if abs(np.log10(v) - round(np.log10(v))) < 1e-6
-                                    else f"{v:g}" for v in xt])
-            elif kind == "cat":
-                ax.set_xticks(x)
-                ax.set_xticklabels(labels)
-                ax.set_xlim(-0.5, len(x) - 0.5)
-            else:
-                ax.set_xticks(list(x) if len(x) <= 4 else list(x)[::2])
-                ax.set_xticklabels([f"{v:g}" for v in (list(x) if len(x) <= 4 else list(x)[::2])])
-            if i < 2:
-                ax.tick_params(axis="x", labelbottom=False)
-            else:
-                ax.set_xlabel(xl)
-            if j == 0:
-                ax.set_ylabel(yl)
-            ax.tick_params(axis="both", labelsize=6.5)
-    axes[0, 0].set_ylim(89, 101)
-    axes[1, 0].set_ylim(40, 95)
-    lo = e6.unit_cost_per_kwh.min()
-    hi = e6.unit_cost_per_kwh.max()
-    pad = 0.08 * (hi - lo)
-    axes[2, 0].set_ylim(lo - pad, hi + pad)
-    fig.subplots_adjust(left=0.105, right=0.995, top=0.98, bottom=0.12, hspace=0.18, wspace=0.12)
-    C.save(fig, "fig8_sensitivity")
-
-
 def main():
     C.style()
     fig3_service()
@@ -405,7 +336,6 @@ def main():
     fig4_cost_tiers()
     s = fig5_swimlane_s3()
     fig7_aemo()
-    fig8_sensitivity()
     print("  fig5 vehicles:", s)
 
 

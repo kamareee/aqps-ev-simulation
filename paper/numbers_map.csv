@@ -263,6 +263,18 @@ macro,value,unit,source,expression
 \RDeltaTwoNonPri,87.6,%,results/E6_S2/summary/runs.csv,"nonpriority_fulfil_pct [param=preempt_slack_h, value=2]"
 \RDeltaThreeNonPri,83.0,%,results/E6_S2/summary/runs.csv,"nonpriority_fulfil_pct [param=preempt_slack_h, value=3]"
 \RReserveTwentyMission,95.6,%,results/E6_S2/summary/runs.csv,"mission_sufficiency_pct [param=reserve_frac, value=0.2]"
+\RDeltaOneNonPriSThree,80.7,%,results/E6/summary/runs.csv,"nonpriority_fulfil_pct [param=preempt_slack_h, value=1]"
+\RDeltaTwoNonPriSThree,76.4,%,results/E6/summary/runs.csv,"nonpriority_fulfil_pct [param=preempt_slack_h, value=2]"
+\RDeltaThreeNonPriSThree,64.5,%,results/E6/summary/runs.csv,"nonpriority_fulfil_pct [param=preempt_slack_h, value=3]"
+\RDeltaEagerNonPriSThree,53.2,%,results/E6/summary/runs.csv,"nonpriority_fulfil_pct [param=preempt_slack_h, value=null (eager)]"
+\RAlphaThreeNonPriMinSThree,73.2,%,results/E6/summary/runs.csv,min nonpriority_fulfil_pct [param=alpha3]
+\RAlphaThreeNonPriMaxSThree,76.4,%,results/E6/summary/runs.csv,max nonpriority_fulfil_pct [param=alpha3]
+\RKatcMissionMinSThree,95.6,%,results/E6/summary/runs.csv,"min mission_sufficiency_pct [param=k_atc, 22 EVSEs]"
+\RKatcDefaultMissionSThree,97.8,%,results/E6/summary/runs.csv,"mission_sufficiency_pct [param=k_atc, value=1.5, 22 EVSEs]"
+\RReserveFifteenMissionSThree,97.8,%,results/E6/summary/runs.csv,"mission_sufficiency_pct [param=reserve_frac, value=0.15]"
+\RReserveTwentyMissionSThree,86.7,%,results/E6/summary/runs.csv,"mission_sufficiency_pct [param=reserve_frac, value=0.2]"
+\RReserveTwentyEscalSThree,33,,results/E6/summary/runs.csv,"escalation_episodes [param=reserve_frac, value=0.2]"
+\RSensSoftSThree,0,,results/E6/summary/runs.csv,sum soft_solves over all 28 S3 runs
 \ROverloadMissionMinStatic,48.3,%,results/E7/summary/runs.csv,"min mission_sufficiency_pct [priority_share>=0.65, method=AQPS-static]"
 \ROverloadMissionMaxStatic,51.3,%,results/E7/summary/runs.csv,"max mission_sufficiency_pct [priority_share>=0.65, method=AQPS-static]"
 \ROverloadMissionMinRTET,96.6,%,results/E7/summary/runs.csv,"min mission_sufficiency_pct [priority_share>=0.65, method=AQPS-RT-ET]"
