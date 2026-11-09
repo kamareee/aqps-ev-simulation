@@ -1,6 +1,6 @@
 {
   "experiment": "E6",
-  "git_commit": "21da49645cdd506982e0077c75a0e23d6828fba1",
+  "git_commit": "987910a90602684bb15736e755e9f6fba87141e2",
   "git_dirty": false,
   "config_sha256": "e6a39509f2d7496b5192f32757f0688d014d5a7975b6f3851db11e41679ca54a",
   "config": {
@@ -276,7 +276,7 @@
       }
     }
   },
-  "run_started": "2026-11-09T10:44:28",
+  "run_started": "2026-11-09T11:13:49",
   "machine": {
     "os": "Windows-11-10.0.26200-SP0",
     "processor": "Intel64 Family 6 Model 189 Stepping 1, GenuineIntel",
@@ -304,6 +304,6 @@
     "methods": null,
     "n_seeds": null
   },
-  "fresh": false,
+  "fresh": true,
   "history": []
 }
