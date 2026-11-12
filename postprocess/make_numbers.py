@@ -215,6 +215,11 @@ def e7():
             f"min mission_sufficiency_pct [priority_share>=0.65, method={m}]")
         put(f"OverloadMissionMax{MW[m]}", x.mission_sufficiency_pct.max(), 1, "%", src,
             f"max mission_sufficiency_pct [priority_share>=0.65, method={m}]")
+    x = d[d.method == "AQPS-RT-ET"]
+    put("OverloadUnitCostMinRTET", x.unit_cost_per_kwh.min(), 3, "$/kWh", src,
+        "min unit_cost_per_kwh [all priority shares, method=AQPS-RT-ET]")
+    put("OverloadUnitCostMaxRTET", x.unit_cost_per_kwh.max(), 3, "$/kWh", src,
+        "max unit_cost_per_kwh [all priority shares, method=AQPS-RT-ET]")
     lo = d[d.priority_share <= 0.5]
     for nm, ms in (("LLFEDF", ["LLF", "EDF"]), ("MPC", ["MPC-only"])):
         x = lo[lo.method.isin(ms)]

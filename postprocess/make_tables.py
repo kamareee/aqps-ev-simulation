@@ -259,6 +259,35 @@ def tab_e6():
               "per charger); all other rows use 35 EVSEs."))
 
 
+def tab_guideline():
+    """Static text (no result numbers): parameter guideline derived from tab_e6 (E6) and tab_e7 (E7)."""
+    rr = ">{\\raggedright\\arraybackslash}"
+    L = rr + "p{0.29\\linewidth}" + rr + "p{0.40\\linewidth}" + rr + "p{0.19\\linewidth}"
+    rows = [
+        "Any day & Keep $\\alpha_2$, $\\alpha_3$ and $\\tau_\\mathrm{pv}$ at their defaults & "
+        "Table~\\ref{tab:e6}, S2, S3 \\\\",
+        "\\addlinespace",
+        "Priority arrivals outside the peak tariff window (as in S2) & $\\delta$ of 1--2\\,h; avoid "
+        "$\\delta\\ge3$\\,h and eager preemption & Table~\\ref{tab:e6}, S2 \\\\",
+        "\\addlinespace",
+        "Priority arrivals inside the peak tariff window (as in S3) & Shorten $\\delta$ towards "
+        "1\\,h$^\\mathrm{a}$ & Table~\\ref{tab:e6}, S3 \\\\",
+        "\\addlinespace",
+        "Scarce chargers (four vehicles per charger) with peak arrivals & Lower $k_\\mathrm{ATC}$ to 1 or "
+        "less & Table~\\ref{tab:e6}, S3 \\\\",
+        "\\addlinespace",
+        "High energy demand over site capacity & Keep the reserve $r_i$ at 10\\,\\% of $C_i$ or less & "
+        "Table~\\ref{tab:e6}, S3 \\\\",
+        "\\addlinespace",
+        "Priority share of 65\\,\\% or more in the contended cohort & No setting restores all missions; "
+        "shorten the priority list & Table~\\ref{tab:e7} \\\\",
+    ]
+    write("tab_guideline", table(
+        "table", "Guideline for choosing the parameters from the day-ahead roster.", "tab:guide", L,
+        "Day-ahead roster & Guideline & Basis", rows, colsep="3pt",
+        notes="$^\\mathrm{a}$ Tested on a day without disruptions; late arrivals may need a longer $\\delta$."))
+
+
 # ----------------------------------------------------------------------------- E7
 def tab_e7():
     d = C.runs("E7")
@@ -287,6 +316,7 @@ def main():
     tab_e5()
     tab_e6()
     tab_e7()
+    tab_guideline()
 
 
 if __name__ == "__main__":

@@ -285,6 +285,8 @@ macro,value,unit,source,expression
 \ROverloadMissionMaxEDF,64.1,%,results/E7/summary/runs.csv,"max mission_sufficiency_pct [priority_share>=0.65, method=EDF]"
 \ROverloadMissionMinMPC,55.2,%,results/E7/summary/runs.csv,"min mission_sufficiency_pct [priority_share>=0.65, method=MPC-only]"
 \ROverloadMissionMaxMPC,64.1,%,results/E7/summary/runs.csv,"max mission_sufficiency_pct [priority_share>=0.65, method=MPC-only]"
+\ROverloadUnitCostMinRTET,0.258,$/kWh,results/E7/summary/runs.csv,"min unit_cost_per_kwh [all priority shares, method=AQPS-RT-ET]"
+\ROverloadUnitCostMaxRTET,0.259,$/kWh,results/E7/summary/runs.csv,"max unit_cost_per_kwh [all priority shares, method=AQPS-RT-ET]"
 \RLowShareMissionMinLLFEDF,21,%,results/E7/summary/runs.csv,"min mission_sufficiency_pct [priority_share<=0.5, method in ['LLF', 'EDF']]"
 \RLowShareMissionMaxLLFEDF,36,%,results/E7/summary/runs.csv,"max mission_sufficiency_pct [priority_share<=0.5, method in ['LLF', 'EDF']]"
 \RLowShareMissionMinMPC,43,%,results/E7/summary/runs.csv,"min mission_sufficiency_pct [priority_share<=0.5, method in ['MPC-only']]"
