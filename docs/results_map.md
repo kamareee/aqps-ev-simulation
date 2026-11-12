@@ -10,7 +10,7 @@ Each run writes `results/<EXP>/raw/<run_id>.json.gz` (not committed) and `result
 | E3 | 30 random-disruption seeds, 90-EV **S3** (S2 version in `results/E3_S2`) | `E3/summary/runs.csv` | §4.5 | Table: mean ± 95 % CI |
 | E4 | 6 real AEMO days (nMAE percentiles) × {45, 90} EVs | `E4/summary/runs.csv` | §4.6 | Fig: (a) forecast vs actual (3 days), (b) $/kWh vs nMAE |
 | E5 | (a) RT vs RT-ET, (b) T_max sweep, (c) fleet / EV:EVSE ratio | `E5/summary/runs.csv` | §4.7 | Table: L2 solves, total solves, solve ms, outcome difference; scalability rows |
-| E6 | α3, α2, k_atc (congested), reserve, τ_pv, preemption slack δ | `E6/summary/runs.csv` | §4.8 | Fig: (a) α3, (b) reserve; others in a table |
+| E6 | α3, α2, k_atc (congested, 4:1), reserve, τ_pv, preemption slack δ; S3 | `E6/summary/runs.csv` (S3), `E6_S2/summary/runs.csv` (S2) | §5.6 | Table (S2 | S3) |
 | E7 | Priority share 30–90 % on 45-EV **S3** (cohort centred on the scenario's priority arrivals); S2 version in `results/E7_S2` | `E7/summary/runs.csv` | §4.8 / §3.5 | Table: overload behaviour |
 
 Inputs recorded in each `manifest.json`: git commit, config hash and snapshot, solver and versions,
@@ -31,12 +31,12 @@ outputs (decision 2026-10-16); AQPS-RT appears in tables only.
 | `paper/figures/fig5_gantt.pdf` | E1 raw (90-EV S3, AQPS-RT-ET and LLF) | 3 priority EVs with largest LLF shortfall + 3 most-preempted non-priority EVs |
 | `paper/figures/fig6_swimlane.pdf` | E2 raw (case 1, AQPS-RT-ET) | EVSE state per vehicle; Tier 1/2/3 events from the trace |
 | `paper/figures/fig7_aemo.pdf` | AEMO day file, E4 runs.csv | Forecast vs actual (p10, p50, p97.5 days); $/kWh vs nMAE |
-| `paper/figures/fig8_sensitivity.pdf` | E6 runs.csv | α3 and reserve sweeps |
+| (removed) fig8_sensitivity | E6 | replaced by tab_e6 |
 | `paper/tables/tab_tou.tex` (not used in the manuscript; tariff in text), `tab_scenarios.tex` | config, fleet JSON metadata | Inputs |
 | `paper/tables/tab_e1_master.tex` | E1 | Master table (7 methods) |
 | `paper/tables/tab_e2_cases.tex`, `tab_e2_preview.tex` | E2 runs.csv, previews.csv | Case studies, preview example |
 | `paper/tables/tab_e3_montecarlo.tex` | E3 | Mean ± 95 % t-CI over 30 seeds |
 | `paper/tables/tab_e5_et.tex`, `tab_e5_tmax.tex` (values quoted in text), `tab_e5_scal.tex` | E5 | ET vs RT, T_max, scalability |
-| `paper/tables/tab_e6.tex` | E6 | α2, k_ATC, τ_pv, δ |
+| `paper/tables/tab_e6.tex` | E6 (S3), E6_S2 (S2) | all six sweeps, S2 \| S3 |
 | `paper/tables/tab_e7.tex` | E7 | Priority overload |
 | `paper/numbers.tex`, `paper/numbers_map.csv` | all | Every number quoted in the text, as a macro, with its source and expression |

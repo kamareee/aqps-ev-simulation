@@ -163,8 +163,9 @@ def e5():
 
 
 def e6():
-    d = C.runs("E6")
-    src = "results/E6/summary/runs.csv"
+    # S2 sweep (results/E6_S2)
+    d = C.runs("E6_S2")
+    src = "results/E6_S2/summary/runs.csv"
     s = d[d.param == "preempt_slack_h"]
     put("DeltaEagerNonPri", s[s.value.isna()].nonpriority_fulfil_pct.iloc[0], 1, "%", src,
         "nonpriority_fulfil_pct [param=preempt_slack_h, value=null (eager)]")
@@ -175,6 +176,33 @@ def e6():
     r = d[d.param == "reserve_frac"]
     put("ReserveTwentyMission", r[np.isclose(r.value, 0.2)].mission_sufficiency_pct.iloc[0], 1, "%", src,
         "mission_sufficiency_pct [param=reserve_frac, value=0.2]")
+    # S3 sweep (results/E6)
+    d = C.runs("E6")
+    src = "results/E6/summary/runs.csv"
+    s = d[d.param == "preempt_slack_h"]
+    for nm, v in (("One", 1.0), ("Two", 2.0), ("Three", 3.0)):
+        put(f"Delta{nm}NonPriSThree", s[s.value == v].nonpriority_fulfil_pct.iloc[0], 1, "%", src,
+            f"nonpriority_fulfil_pct [param=preempt_slack_h, value={v:g}]")
+    put("DeltaEagerNonPriSThree", s[s.value.isna()].nonpriority_fulfil_pct.iloc[0], 1, "%", src,
+        "nonpriority_fulfil_pct [param=preempt_slack_h, value=null (eager)]")
+    a3 = d[d.param == "alpha3"]
+    put("AlphaThreeNonPriMinSThree", a3.nonpriority_fulfil_pct.min(), 1, "%", src,
+        "min nonpriority_fulfil_pct [param=alpha3]")
+    put("AlphaThreeNonPriMaxSThree", a3.nonpriority_fulfil_pct.max(), 1, "%", src,
+        "max nonpriority_fulfil_pct [param=alpha3]")
+    k = d[d.param == "k_atc"]
+    put("KatcMissionMinSThree", k.mission_sufficiency_pct.min(), 1, "%", src,
+        "min mission_sufficiency_pct [param=k_atc, 22 EVSEs]")
+    put("KatcDefaultMissionSThree", k[np.isclose(k.value, 1.5)].mission_sufficiency_pct.iloc[0], 1, "%", src,
+        "mission_sufficiency_pct [param=k_atc, value=1.5, 22 EVSEs]")
+    r = d[d.param == "reserve_frac"]
+    put("ReserveFifteenMissionSThree", r[np.isclose(r.value, 0.15)].mission_sufficiency_pct.iloc[0], 1, "%", src,
+        "mission_sufficiency_pct [param=reserve_frac, value=0.15]")
+    put("ReserveTwentyMissionSThree", r[np.isclose(r.value, 0.2)].mission_sufficiency_pct.iloc[0], 1, "%", src,
+        "mission_sufficiency_pct [param=reserve_frac, value=0.2]")
+    put("ReserveTwentyEscalSThree", r[np.isclose(r.value, 0.2)].escalation_episodes.iloc[0], 0, "", src,
+        "escalation_episodes [param=reserve_frac, value=0.2]")
+    put("SensSoftSThree", d.soft_solves.sum(), 0, "", src, "sum soft_solves over all 28 S3 runs")
 
 
 def e7():
@@ -187,6 +215,11 @@ def e7():
             f"min mission_sufficiency_pct [priority_share>=0.65, method={m}]")
         put(f"OverloadMissionMax{MW[m]}", x.mission_sufficiency_pct.max(), 1, "%", src,
             f"max mission_sufficiency_pct [priority_share>=0.65, method={m}]")
+    x = d[d.method == "AQPS-RT-ET"]
+    put("OverloadUnitCostMinRTET", x.unit_cost_per_kwh.min(), 3, "$/kWh", src,
+        "min unit_cost_per_kwh [all priority shares, method=AQPS-RT-ET]")
+    put("OverloadUnitCostMaxRTET", x.unit_cost_per_kwh.max(), 3, "$/kWh", src,
+        "max unit_cost_per_kwh [all priority shares, method=AQPS-RT-ET]")
     lo = d[d.priority_share <= 0.5]
     for nm, ms in (("LLFEDF", ["LLF", "EDF"]), ("MPC", ["MPC-only"])):
         x = lo[lo.method.isin(ms)]
