@@ -217,22 +217,75 @@ def tab_e5():
 
 # ----------------------------------------------------------------------------- E6
 def tab_e6():
-    d = C.runs("E6")
-    lab = {"alpha2": "$\\alpha_2$", "k_atc": "$k_\\mathrm{ATC}$ (EV:EVSE 4:1)", "pv_dev_threshold_kw": "$\\tau_\\mathrm{pv}$ (kW)",
-           "preempt_slack_h": "$\\delta$ (h)", "alpha3": "$\\alpha_3$", "reserve_frac": "$r$ (\\% of capacity)"}
+    """E6 one-at-a-time sensitivity, AQPS-RT-ET, 90 EVs: S2 (results/E6_S2) | S3 (results/E6)."""
+    D = {"S2": C.runs("E6_S2"), "S3": C.runs("E6")}
+    c = C.cfg()
+    dflt = {"alpha2": c["optimizer"]["alpha2"], "alpha3": c["optimizer"]["alpha3"],
+            "pv_dev_threshold_kw": c["event_trigger"]["pv_dev_threshold_kw"],
+            "preempt_slack_h": c["layer1"]["preempt_slack_h"], "k_atc": c["layer0"]["k_atc"],
+            "reserve_frac": 0.10}  # reserve: data_generator.py (0.10 x battery capacity)
+    lab = {"alpha2": "$\\alpha_2$", "alpha3": "$\\alpha_3$", "pv_dev_threshold_kw": "$\\tau_\\mathrm{pv}$ (kW)",
+           "preempt_slack_h": "$\\delta$ (h)", "k_atc": "$k_\\mathrm{ATC}$ (four vehicles per charger)",
+           "reserve_frac": "$r_i$ (\\% of $C_i$)"}
+    def val(p, v):
+        if not np.isfinite(v):
+            return "eager"
+        if p == "alpha3":
+            return f"$10^{{{int(round(np.log10(v)))}}}$"
+        if p == "reserve_frac":
+            return f"{100 * v:g}"
+        return f"{v:g}"
     rows = []
-    for p in ["alpha2", "k_atc", "pv_dev_threshold_kw", "preempt_slack_h"]:
-        x = d[d.param == p]
-        x = x.assign(sortkey=x.value.fillna(np.inf)).sort_values("sortkey")
-        rows.append(f"\\multicolumn{{6}}{{l}}{{\\textit{{{lab[p]}}}}} \\\\")
-        for r in x.itertuples():
-            v = "eager" if not np.isfinite(r.sortkey) else (f"{r.value:g}")
-            rows.append(f"\\quad {v} & {f(r.mission_sufficiency_pct)} & {f(r.nonpriority_fulfil_pct)} & "
-                        f"{f(r.unit_cost_per_kwh, 4)} & {int(r.preemptions)} & {int(r.escalation_episodes)} \\\\")
+    for p in ["alpha2", "alpha3", "pv_dev_threshold_kw", "preempt_slack_h", "k_atc", "reserve_frac"]:
+        rows.append(f"\\multicolumn{{9}}{{l}}{{\\textit{{{lab[p]}}}}} \\\\")
+        x2 = D["S2"][D["S2"].param == p].assign(k=lambda z: z.value.fillna(np.inf)).sort_values("k").set_index("k")
+        x3 = D["S3"][D["S3"].param == p].assign(k=lambda z: z.value.fillna(np.inf)).sort_values("k").set_index("k")
+        assert list(x2.index) == list(x3.index), p
+        for k in x2.index:
+            star = "$^\\ast$" if np.isfinite(k) and np.isclose(k, dflt[p]) else ""
+            cells = []
+            for x in (x2, x3):
+                r = x.loc[k]
+                cells += [f(r.mission_sufficiency_pct), f(r.nonpriority_fulfil_pct), f(r.unit_cost_per_kwh, 3),
+                          f"{int(r.preemptions)}"]
+            rows.append(f"\\quad {val(p, k)}{star} & " + " & ".join(cells) + " \\\\")
+    sub = [H("Mission", "(\\%)"), H("Non-pr.", "(\\%)"), H("Unit cost", "(\\$/kWh)"), H("Tier 1", "preempt.")]
+    head = ("& \\multicolumn{4}{c}{S2 Contention} & \\multicolumn{4}{c}{S3 Peak stress} \\\\\n"
+            "\\cmidrule(lr){2-5}\\cmidrule(lr){6-9}\nSetting & " + " & ".join(sub * 2))
     write("tab_e6", table(
-        "table", "Sensitivity, 90 EVs, S2, AQPS-RT-ET (E6); $\\alpha_3$ and $r$ in Fig.~\\ref{fig:sens}.", "tab:e6",
-        "lrrrrr", f"Setting & {H('Mission', '(\\%)')} & {H('Non-pr.', '(\\%)')} & {H('Unit cost', '(\\$/kWh)')} & "
-        f"{H('Tier 1', 'preempt.')} & Escal.", rows, colsep="4pt"))
+        "table*", "One-at-a-time sensitivity of AQPS-RT-ET, 90 EVs (E6). One parameter is varied, the others stay at "
+                  "their defaults ($^\\ast$).", "tab:e6", "l" + "rrrr" * 2, head, rows,
+        notes="Tier~1 preempt.: number of Tier~1 preemptions. The $k_\\mathrm{ATC}$ sweep uses 22 EVSEs (four vehicles "
+              "per charger); all other rows use 35 EVSEs."))
+
+
+def tab_guideline():
+    """Static text (no result numbers): parameter guideline derived from tab_e6 (E6) and tab_e7 (E7)."""
+    rr = ">{\\raggedright\\arraybackslash}"
+    L = rr + "p{0.29\\linewidth}" + rr + "p{0.40\\linewidth}" + rr + "p{0.19\\linewidth}"
+    rows = [
+        "Any day & Keep $\\alpha_2$, $\\alpha_3$ and $\\tau_\\mathrm{pv}$ at their defaults & "
+        "Table~\\ref{tab:e6}, S2, S3 \\\\",
+        "\\addlinespace",
+        "Priority arrivals outside the peak tariff window (as in S2) & $\\delta$ of 1--2\\,h; avoid "
+        "$\\delta\\ge3$\\,h and eager preemption & Table~\\ref{tab:e6}, S2 \\\\",
+        "\\addlinespace",
+        "Priority arrivals inside the peak tariff window (as in S3) & Shorten $\\delta$ towards "
+        "1\\,h$^\\mathrm{a}$ & Table~\\ref{tab:e6}, S3 \\\\",
+        "\\addlinespace",
+        "Scarce chargers (four vehicles per charger) with peak arrivals & Lower $k_\\mathrm{ATC}$ to 1 or "
+        "less & Table~\\ref{tab:e6}, S3 \\\\",
+        "\\addlinespace",
+        "High energy demand over site capacity & Keep the reserve $r_i$ at 10\\,\\% of $C_i$ or less & "
+        "Table~\\ref{tab:e6}, S3 \\\\",
+        "\\addlinespace",
+        "Priority share of 65\\,\\% or more in the contended cohort & No setting restores all missions; "
+        "shorten the priority list & Table~\\ref{tab:e7} \\\\",
+    ]
+    write("tab_guideline", table(
+        "table", "Guideline for choosing the parameters from the day-ahead roster.", "tab:guide", L,
+        "Day-ahead roster & Guideline & Basis", rows, colsep="3pt",
+        notes="$^\\mathrm{a}$ Tested on a day without disruptions; late arrivals may need a longer $\\delta$."))
 
 
 # ----------------------------------------------------------------------------- E7
@@ -263,6 +316,7 @@ def main():
     tab_e5()
     tab_e6()
     tab_e7()
+    tab_guideline()
 
 
 if __name__ == "__main__":
